@@ -1,13 +1,20 @@
 import { useState, useEffect } from 'react';
 import { buscarHistorico } from '../../core/use-cases/buscar-historico';
+import { obterProximoLembrete } from '../../core/use-cases/notificacao-nativa';
 import { AgendaBox } from '../components/AgendaBox';
 
 export function DiarioView() {
   const [textoLembrete, setTextoLembrete] = useState('');
   const [lembretes, setLembretes] = useState<string[]>([]);
+  const [proximos, setProximos] = useState<Record<string, string | null>>({});
 
   const carregarHistorico = async () => {
     await buscarHistorico();
+    setProximos({
+      rega: obterProximoLembrete('rega'),
+      sol: obterProximoLembrete('sol'),
+      adubo: obterProximoLembrete('adubo')
+    });
   };
 
   useEffect(() => {
@@ -36,12 +43,54 @@ export function DiarioView() {
       <AgendaBox onCuidadoRegistrado={carregarHistorico} />
 
       <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: '10px',
+        marginTop: '20px'
+      }}>
+        {[
+          { tipo: 'rega', label: 'Próxima Rega', icone: '💧', cor: '#3A86FF' },
+          { tipo: 'sol', label: 'Próximo Sol', icone: '☀️', cor: '#D98E04' },
+          { tipo: 'adubo', label: 'Próximo Adubo', icone: '🌱', cor: '#40513B' }
+        ].map(({ tipo, label, icone, cor }) => (
+          <div key={tipo} style={{
+            background: '#FFFFFF',
+            borderRadius: '16px',
+            padding: '12px 8px',
+            textAlign: 'center',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+            border: `2px solid ${cor}20`
+          }}>
+            <span style={{ fontSize: '1.2rem' }}>{icone}</span>
+            <p style={{
+              fontFamily: "'Plus Jakarta Sans', sans-serif",
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              color: '#7A7A7A',
+              margin: '4px 0 2px'
+            }}>
+              {label}
+            </p>
+            <p style={{
+              fontFamily: "'Caveat', cursive",
+              fontSize: '1rem',
+              fontWeight: 600,
+              color: proximos[tipo] === 'Vence hoje!' ? '#E63946' : cor,
+              margin: 0
+            }}>
+              {proximos[tipo] || 'Sem agendamento'}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div style={{
         background: '#FFFFFF',
         borderRadius: '30px',
         padding: '30px',
         boxShadow: '0 15px 40px rgba(60, 42, 33, 0.04)',
         borderLeft: '8px solid #40513B',
-        marginTop: '30px'
+        marginTop: '20px'
       }}>
         <h3 style={{
           fontFamily: "'Caveat', cursive",

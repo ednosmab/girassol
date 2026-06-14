@@ -1,4 +1,4 @@
-import { dispararNotificacaoNativa, TitulosNotificacao, DescricoesNotificacao } from '../../core/use-cases/notificacao-nativa';
+import { agendarLembrete } from '../../core/use-cases/notificacao-nativa';
 
 interface AgendaBoxProps {
   onCuidadoRegistrado?: () => void;
@@ -12,10 +12,7 @@ const tiposCuidado: { tipo: 'rega' | 'sol' | 'adubo'; label: string; icone: stri
 
 export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
   const handleAgendar = async (tipo: 'rega' | 'sol' | 'adubo') => {
-    await dispararNotificacaoNativa(
-      TitulosNotificacao[tipo],
-      DescricoesNotificacao[tipo]
-    );
+    await agendarLembrete(tipo);
     onCuidadoRegistrado?.();
   };
 
