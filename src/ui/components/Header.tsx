@@ -1,28 +1,33 @@
 export function Header() {
   return (
     <header style={{
-      background: 'linear-gradient(135deg, #2d5016 0%, #4a7c24 100%)',
-      color: '#fff',
-      padding: '1rem 1.5rem',
+      background: 'linear-gradient(135deg, #F2B705 0%, #D98E04 100%)',
+      color: '#3C2A21',
+      padding: '80px 20px 100px 20px',
       textAlign: 'center',
-      boxShadow: '0 4px 12px rgba(45, 80, 22, 0.3)'
+      position: 'relative',
+      borderBottomLeftRadius: '50% 8%',
+      borderBottomRightRadius: '50% 8%',
+      boxShadow: '0 10px 30px rgba(217, 142, 4, 0.15)'
     }}>
       <h1 style={{
-        fontFamily: "'Playfair Display', serif",
-        fontSize: '1.8rem',
-        fontWeight: 700,
+        fontFamily: "'Caveat', cursive",
+        fontSize: 'clamp(3rem, 10vw, 4rem)',
+        fontWeight: 600,
         margin: 0,
-        letterSpacing: '0.02em'
+        lineHeight: 1
       }}>
-        🌻 Meu Girassol
+        Jardim Secreto
       </h1>
       <p style={{
-        fontFamily: "'Caveat', cursive",
-        fontSize: '1rem',
-        margin: '0.25rem 0 0',
-        opacity: 0.9
+        margin: '10px 0 0 0',
+        fontSize: '1.1rem',
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '2px',
+        opacity: 0.8
       }}>
-        Diário Interativo de Cuidados
+        O Guia Vivente do Seu Girassol
       </p>
     </header>
   );

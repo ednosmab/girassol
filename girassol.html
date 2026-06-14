@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Meu Girassol - Diário de Cuidados</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --petala: #F2B705;
+      --petala-escura: #D98E04;
+      --miolo: #3C2A21;
+      --folha: #40513B;
+      --fundo: #FFFDF9;
+      --card-fundo: #FFFFFF;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: var(--fundo);
+      color: var(--miolo);
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
+
+    /* --- MENU HAMBÚRGUER --- */
+    .menu-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 100;
+      background: var(--petala);
+      border: none;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 5px;
+      transition: transform 0.3s;
+    }
+    .menu-btn:active { transform: scale(0.9); }
+    .menu-btn span {
+      width: 25px;
+      height: 3px;
+      background: var(--miolo);
+      border-radius: 2px;
+      transition: 0.3s;
+    }
+
+    /* Menu Aberto */
+    .menu-btn.open span:nth-child(1) { transform: rotate(45deg) translate(5px, 6px); }
+    .menu-btn.open span:nth-child(2) { opacity: 0; }
+    .menu-btn.open span:nth-child(3) { transform: rotate(-45deg) translate(5px, -6px); }
+
+    .nav-menu {
+      position: fixed;
+      top: 0;
+      right: -100%;
+      width: 280px;
+      height: 100vh;
+      background: var(--miolo);
+      z-index: 99;
+      padding-top: 100px;
+      transition: right 0.4s cubic-bezier(0.1, 1, 0.1, 1);
+      box-shadow: -5px 0 20px rgba(0,0,0,0.3);
+    }
+    .nav-menu.active { right: 0; }
+    .nav-menu a {
+      display: block;
+      color: #FFFDF9;
+      padding: 18px 30px;
+      text-decoration: none;
+      font-size: 1.2rem;
+      font-weight: 600;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      transition: 0.3s;
+    }
+    .nav-menu a:hover {
+      background: var(--petala);
+      color: var(--miolo);
+      padding-left: 40px;
+    }
+
+    /* --- HEADER ORGÂNICO --- */
+    header {
+      background: linear-gradient(135deg, var(--petala) 0%, var(--petala-escura) 100%);
+      color: var(--miolo);
+      padding: 80px 20px 100px 20px;
+      text-align: center;
+      position: relative;
+      /* Curva fluida imitando pétala no rodapé do header */
+      border-bottom-left-radius: 50% 8%;
+      border-bottom-right-radius: 50% 8%;
+      box-shadow: 0 10px 30px rgba(217, 142, 4, 0.15);
+    }
+    header h1 {
+      font-family: 'Caveat', cursive;
+      font-size: 4rem;
+      margin: 0;
+      line-height: 1;
+    }
+    header p {
+      margin: 10px 0 0 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      opacity: 0.8;
+    }
+
+    /* --- NAVEGAÇÃO DE PÁGINAS (ABAS) --- */
+    .page {
+      display: none;
+      max-width: 700px;
+      margin: -40px auto 60px auto;
+      padding: 0 20px;
+      position: relative;
+      z-index: 10;
+    }
+    .page.active { display: block; animation: fadeIn 0.5s ease forwards; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* --- CONTEÚDO EDITORIAL (JARDIM DE CONTEXTO) --- */
+    .conteudo-bloco {
+      background: var(--card-fundo);
+      border-radius: 30px;
+      padding: 40px 30px;
+      box-shadow: 0 15px 40px rgba(60, 42, 33, 0.04);
+      border-left: 8px solid var(--folha);
+      margin-bottom: 30px;
+    }
+    .conteudo-bloco h2 {
+      font-family: 'Caveat', cursive;
+      font-size: 2.5rem;
+      color: var(--folha);
+      margin-top: 0;
+      margin-bottom: 15px;
+    }
+    .conteudo-bloco p {
+      font-size: 1.05rem;
+      line-height: 1.7;
+      color: #4A4A4A;
+    }
+
+    /* Grafismos de Pétalas Decorativas */
+    .detalhe-petala {
+      background: var(--petala);
+      width: 80px;
+      height: 40px;
+      border-radius: 0 100px;
+      margin: 20px auto;
+      opacity: 0.7;
+    }
+
+    /* --- INTERAÇÃO: AGENDA EM LOCALSTORAGE --- */
+    .agenda-box {
+      background: var(--card-fundo);
+      border-radius: 30px;
+      padding: 35px 25px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.05);
+      border: 2px dashed var(--petala);
+    }
+    .status-painel {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 15px;
+      margin-bottom: 30px;
+    }
+    .status-item {
+      background: var(--fundo);
+      border-radius: 20px;
+      padding: 15px;
+      text-align: center;
+      border: 1px solid rgba(0,0,0,0.05);
+    }
+    .status-item span {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #7A7A7A;
+    }
+    .status-item strong {
+      display: block;
+      font-size: 0.95rem;
+      margin-top: 5px;
+      color: var(--miolo);
+    }
+
+    /* Botão estilo Pétala */
+    .btn-acao {
+      width: 100%;
+      background: var(--miolo);
+      color: white;
+      border: none;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 700;
+      border-radius: 40px 10px 40px 10px; /* Formato de folha/pétala */
+      cursor: pointer;
+      transition: 0.3s;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-acao.rega { background: #3A86FF; }
+    .btn-acao.sol { background: var(--petala-escura); }
+    .btn-acao.adubo { background: var(--folha); }
+    .btn-acao:hover { transform: translateY(-2px); filter: brightness(1.1); }
+
+    /* Lembretes rápidos */
+    .lembretes-container h3 {
+      font-size: 1.1rem;
+      margin-top: 25px;
+      border-bottom: 2px solid var(--fundo);
+      padding-bottom: 8px;
+    }
+    .lembrete-input-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    .lembrete-input-group input {
+      flex: 1;
+      padding: 12px 20px;
+      border-radius: 20px;
+      border: 1px solid #E0E0E0;
+      font-family: inherit;
+    }
+    .lembrete-input-group button {
+      background: var(--miolo);
+      color: white;
+      border: none;
+      padding: 0 20px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .lista-lembretes {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .lista-lembretes li {
+      background: var(--fundo);
+      padding: 12px 20px;
+      border-radius: 15px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.95rem;
+      border-left: 4px solid var(--petala);
+    }
+    .lista-lembretes li button {
+      background: transparent;
+      border: none;
+      color: #E63946;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    footer {
+      text-align: center;
+      padding: 40px 20px;
+      font-size: 0.9rem;
+      color: #A0A0A0;
+    }
+
+    @media (max-width: 600px) {
+      header h1 { font-size: 3rem; }
+      .status-painel { grid-template-columns: 1fr; }
+      .conteudo-bloco { padding: 30px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Botão Hambúrguer -->
+  <button class="menu-btn" onclick="toggleMenu()" aria-label="Abrir Menu">
+    <span></span>
+    <span></span>
+    <span></span>
+  </button>
+
+  <!-- Menu de Navegação Interativo -->
+  <nav class="nav-menu" id="navMenu">
+    <a href="#" onclick="navigate('diario')">🌻 Meu Diário</a>
+    <a href="#" onclick="navigate('cuidados')">💧 Guia de Cuidados</a>
+    <a href="#" onclick="navigate('origem')">🌍 Origem & História</a>
+    <a href="#" onclick="navigate('curiosidades')">✨ Mistérios da Flor</a>
+  </nav>
+
+  <header>
+    <h1>Jardim Secreto</h1>
+    <p>O Guia Vivente do Seu Girassol</p>
+  </header>
+
+  <!-- PÁGINA 1: DIÁRIO INTERATIVO (LOCALSTORAGE) -->
+  <div id="diario" class="page active">
+    <div class="agenda-box">
+      <h2 style="font-family:'Caveat', cursive; font-size: 2.6rem; margin-top:0; text-align:center;">Calendário de Carinho</h2>
+      <p style="text-align: center; margin-top: -10px; color: #666; font-size: 0.95rem;">Clique nos botões toda vez que cuidar da sua plantinha para registrar a data!</p>
+      
+      <div class="status-painel">
+        <div class="status-item">
+          <span>Última Rega</span>
+          <strong id="txt-rega">Ainda não registrada</strong>
+        </div>
+        <div class="status-item">
+          <span>Banho de Sol</span>
+          <strong id="txt-sol">Ainda não registrado</strong>
+        </div>
+        <div class="status-item">
+          <span>Último Adubo</span>
+          <strong id="txt-adubo">Ainda não registrado</strong>
+        </div>
+      </div>
+
+      <button class="btn-acao rega" onclick="registrarCuidado('rega')">💧 Registrei que Reguei Hoje</button>
+      <button class="btn-acao sol" onclick="registrarCuidado('sol')">☀️ Garanti as 6h de Sol Forte</button>
+      <button class="btn-acao adubo" onclick="registrarCuidado('adubo')">🌱 Coloquei o Fertilizante</button>
+
+      <div class="lembretes-container">
+        <h3>📝 Anotações e Lembretes Importantes</h3>
+        <div class="lembrete-input-group">
+          <input type="text" id="input-lembrete" placeholder="Ex: Brotou uma folhinha nova hoje...">
+          <button onclick="adicionarLembrete()">Salvar</button>
+        </div>
+        <ul class="lista-lembretes" id="lista-lembretes"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- PÁGINA 2: GUIA DE CUIDADOS APROFUNDADO -->
+  <div id="cuidados" class="page">
+    <div class="conteudo-bloco">
+      <h2>💧 A Arte da Rega Inteligente</h2>
+      <p>O girassol detesta raízes afogadas. O grande segredo para acertar o ponto ideal é colocar o dedo na terra: se sentir o solo seco a cerca de dois centímetros de profundidade, é hora de dar de beber à planta. Faça isso calmamente de 2 a 3 vezes por semana nas primeiras horas do dia ou ao entardecer.</p>
+    </div>
+    
+    <div class="conteudo-bloco" style="border-left-color: var(--petala-escura);">
+      <h2>☀️ O Alimento Que Vem do Céu</h2>
+      <p>Sua flor precisa de energia pura! Para se desenvolver majestosamente, separe um espaço na casa onde a luz solar bata de forma direta por, no mínimo, 6 horas todos os dias. Sem essa iluminação agressiva e saudável, o caule pode começar a entortar procurando por luz, enfraquecendo a estrutura.</p>
+    </div>
+
+    <div class="conteudo-bloco" style="border-left-color: #A06030;">
+      <h2>🌱 Preparação do Solo e Nutrientes</h2>
+      <p>O solo perfeito precisa ser fofo e garantir uma boa drenagem de água. Aplique um fertilizante rico em Nitrogênio e Fósforo a cada 15 dias. O fósforo incentiva o nascimento de flores gigantescas e saudáveis, enquanto o nitrogênio deixa a folhagem com aquele verde vivo exuberante.</p>
+    </div>
+  </div>
+
+  <!-- PÁGINA 3: ORIGEM E HISTÓRIA -->
+  <div id="origem" class="page">
+    <div class="conteudo-bloco">
+      <h2>🌍 De Onde Vem Essa Força?</h2>
+      <p>Embora pareça uma flor tipicamente tropical, os girassóis são nativos das Américas do Norte e Central, domesticados por povos indígenas há mais de 3.000 anos. Eles usavam as sementes não apenas como base alimentícia, mas também para extrair pigmentos roxos e amarelos para tingir tecidos e pintar o corpo em rituais sagrados.</p>
+      <div class="detalhe-petala"></div>
+      <p>Mais tarde, no século XVI, navegadores espanhóis se apaixonaram pelo porte gigante da flor e levaram as sementes para a Europa, onde ela deixou de ser um alimento e se tornou o maior símbolo de elegância nos jardins reais europeus.</p>
+    </div>
+  </div>
+
+  <!-- PÁGINA 4: CURIOSIDADES MÍSTICAS -->
+  <div id="curiosidades" class="page">
+    <div class="conteudo-bloco" style="border-left-color: var(--petala);">
+      <h2>🌻 O Bailado do Heliotropismo</h2>
+      <p>A característica mais mágica do girassol é a sua capacidade de se mover com base na posição do sol. Esse fenômeno acontece por conta de um hormônio de crescimento vegetal chamado <em>auxina</em>, que se acumula no lado sombreado do caule, fazendo com que esse lado cresça mais rápido e curve a flor gentilmente em direção à luz.</p>
+    </div>
+    <div class="conteudo-bloco">
+      <h2>✨ Você Sabia? Ela não é uma flor só!</h2>
+      <p>O que chamamos de "flor do girassol" é, na verdade, uma gigantesca inflorescência. Aquela cabeça escura no centro é composta por milhares de minúsculas flores individuais (chamadas de flores do disco), dispostas em padrões matemáticos perfeitos que seguem a famosa Sequência de Fibonacci. A natureza é perfeitamente cirúrgica!</p>
+    </div>
+  </div>
+
+  <footer>
+    <p>Criado com amor para a melhor sogra do mundo.</p>
+  </footer>
+
+  <script>
+    // Controle do Menu Hambúrguer
+    function toggleMenu() {
+      const btn = document.querySelector('.menu-btn');
+      const menu = document.getElementById('navMenu');
+      btn.classList.toggle('open');
+      menu.classList.toggle('active');
+    }
+
+    // Sistema de Navegação SPA (Single Page Application)
+    function navigate(pageId) {
+      // Esconde todas as páginas
+      const pages = document.querySelectorAll('.page');
+      pages.forEach(p => p.classList.remove('active'));
+      
+      // Mostra a selecionada
+      document.getElementById(pageId).classList.add('active');
+      
+      // Fecha o menu automaticamente
+      toggleMenu();
+      
+      // Rola para o topo do conteúdo de forma suave
+      window.scrollTo({ top: 300, behavior: 'smooth' });
+    }
+
+    // --- ENGENHARIA DA AGENDA INTERATIVA (LOCALSTORAGE) ---
+    
+    // Carrega os dados salvos assim que a página abre
+    document.addEventListener("DOMContentLoaded", () => {
+      atualizarPainel('rega');
+      atualizarPainel('sol');
+      atualizarPainel('adubo');
+      renderizarLembretes();
+    });
+
+    function registrarCuidado(tipo) {
+      const agora = new Date();
+      // Formata data e hora legíveis em PT-BR
+      const dataFormatada = agora.toLocaleDateString('pt-BR') + ' às ' + agora.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+      
+      localStorage.setItem(`girassol_${tipo}`, dataFormatada);
+      atualizarPainel(tipo);
+    }
+
+    function atualizarPainel(tipo) {
+      const valorSalvo = localStorage.getItem(`girassol_${tipo}`);
+      if (valorSalvo) {
+        document.getElementById(`txt-${tipo}`).innerText = valorSalvo;
+        document.getElementById(`txt-${tipo}`).style.color = "var(--folha)";
+      }
+    }
+
+    // --- GERENCIADOR DE LEMBRETES/NOTAS ---
+    function adicionarLembrete() {
+      const input = document.getElementById('input-lembrete');
+      const texto = input.value.trim();
+      if (!texto) return;
+
+      let lembretes = JSON.parse(localStorage.getItem('girassol_lembretes')) || [];
+      lembretes.push(texto);
+      localStorage.setItem('girassol_lembretes', JSON.stringify(lembretes));
+      
+      input.value = '';
+      renderizarLembretes();
+    }
+
+    function removerLembrete(index) {
+      let lembretes = JSON.parse(localStorage.getItem('girassol_lembretes')) || [];
+      lembretes.splice(index, 1);
+      localStorage.setItem('girassol_lembretes', JSON.stringify(lembretes));
+      renderizarLembretes();
+    }
+
+    function renderizarLembretes() {
+      const lista = document.getElementById('lista-lembretes');
+      lista.innerHTML = '';
+      let lembretes = JSON.parse(localStorage.getItem('girassol_lembretes')) || [];
+      
+      lembretes.forEach((item, index) => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <span>${item}</span>
+          <button onclick="removerLembrete(${index})">✕</button>
+        `;
+        lista.appendChild(li);
+      });
+    }
+  </script>
+</body>
+</html>

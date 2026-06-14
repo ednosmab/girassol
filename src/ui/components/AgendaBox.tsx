@@ -4,10 +4,10 @@ interface AgendaBoxProps {
   onCuidadoRegistrado?: () => void;
 }
 
-const tiposCuidado: { tipo: 'rega' | 'sol' | 'adubo'; label: string; icone: string; cor: string }[] = [
-  { tipo: 'rega', label: 'Rega', icone: '💧', cor: '#3498db' },
-  { tipo: 'sol', label: 'Sol', icone: '☀️', cor: '#f39c12' },
-  { tipo: 'adubo', label: 'Adubo', icone: '🌱', cor: '#27ae60' }
+const tiposCuidado: { tipo: 'rega' | 'sol' | 'adubo'; label: string; icone: string; cor: string; textoBotao: string }[] = [
+  { tipo: 'rega', label: 'Rega', icone: '💧', cor: '#3A86FF', textoBotao: 'Registrei que Reguei Hoje' },
+  { tipo: 'sol', label: 'Sol', icone: '☀️', cor: '#D98E04', textoBotao: 'Garanti as 6h de Sol Forte' },
+  { tipo: 'adubo', label: 'Adubo', icone: '🌱', cor: '#40513B', textoBotao: 'Coloquei o Fertilizante' }
 ];
 
 export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
@@ -21,63 +21,83 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
 
   return (
     <div style={{
-      background: '#fff',
-      borderRadius: '16px',
-      padding: '1.25rem',
-      boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-      border: '1px solid #e8e4d9'
+      background: '#FFFFFF',
+      borderRadius: '30px',
+      padding: '35px 25px',
+      boxShadow: '0 20px 40px rgba(0,0,0,0.05)',
+      border: '2px dashed #F2B705'
     }}>
-      <h3 style={{
-        fontFamily: "'Playfair Display', serif",
-        fontSize: '1.1rem',
-        color: '#2d5016',
-        margin: '0 0 1rem'
+      <h2 style={{
+        fontFamily: "'Caveat', cursive",
+        fontSize: '2.6rem',
+        fontWeight: 600,
+        marginTop: 0,
+        marginBottom: '5px',
+        textAlign: 'center',
+        color: '#3C2A21'
       }}>
-        🔔 Notificar Cuidado
-      </h3>
+        Calendário de Carinho
+      </h2>
+      <p style={{
+        textAlign: 'center',
+        marginTop: '-10px',
+        color: '#666',
+        fontSize: '0.95rem',
+        marginBottom: '20px'
+      }}>
+        Clique nos botões toda vez que cuidar da sua plantinha para registrar a data!
+      </p>
+
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: '0.75rem'
+        gap: '15px',
+        marginBottom: '25px'
       }}>
-        {tiposCuidado.map(({ tipo, label, icone, cor }) => (
+        {tiposCuidado.map(({ tipo, label }) => (
+          <div key={tipo} style={{
+            background: '#FFFDF9',
+            borderRadius: '20px',
+            padding: '15px',
+            textAlign: 'center',
+            border: '1px solid rgba(0,0,0,0.05)'
+          }}>
+            <span style={{
+              display: 'block',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              color: '#7A7A7A'
+            }}>
+              {label === 'Rega' ? 'Última Rega' : label === 'Sol' ? 'Banho de Sol' : 'Último Adubo'}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {tiposCuidado.map(({ tipo, icone, cor, textoBotao }) => (
           <button
             key={tipo}
             onClick={() => handleAgendar(tipo)}
-            aria-label={`Notificar ${label}`}
+            aria-label={`Registrar ${textoBotao}`}
             style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '1rem 0.5rem',
-              border: `2px solid ${cor}20`,
-              borderRadius: '16px',
-              background: `${cor}08`,
+              width: '100%',
+              background: cor,
+              color: 'white',
+              border: 'none',
+              padding: '14px',
+              fontSize: '1rem',
+              fontWeight: 700,
+              borderRadius: '40px 10px 40px 10px',
               cursor: 'pointer',
-              transition: 'all 0.3s ease',
-              fontFamily: "'Plus Jakarta Sans', sans-serif"
+              transition: '0.3s',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: '8px'
             }}
           >
-            <span style={{
-              fontSize: '2rem',
-              width: '56px',
-              height: '56px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '50%',
-              background: `${cor}15`
-            }}>
-              {icone}
-            </span>
-            <span style={{
-              fontSize: '0.85rem',
-              fontWeight: 500,
-              color: '#333'
-            }}>
-              {label}
-            </span>
+            {icone} {textoBotao}
           </button>
         ))}
       </div>
