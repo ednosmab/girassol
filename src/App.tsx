@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Header } from './ui/components/Header';
 import { Navigation } from './ui/components/Navigation';
+import { InstallPrompt } from './ui/components/InstallPrompt';
 import { DiarioView } from './ui/views/DiarioView';
 import { CuidadosView } from './ui/views/CuidadosView';
 import { OrigemView } from './ui/views/OrigemView';
@@ -62,6 +63,7 @@ export default function App() {
       <main style={{ paddingBottom: '60px' }}>
         {renderizarAba()}
       </main>
+      <InstallPrompt />
       <footer style={{
         textAlign: 'center',
         padding: '40px 20px',
