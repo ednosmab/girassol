@@ -49,10 +49,13 @@ export default function App() {
   return (
     <div style={{
       minHeight: '100vh',
+      width: '100vw',
       background: '#FFFDF9',
       fontFamily: "'Plus Jakarta Sans', sans-serif",
       color: '#3C2A21',
-      overflowX: 'hidden'
+      overflowX: 'hidden',
+      margin: 0,
+      padding: 0
     }}>
       <Header />
       <Navigation abaAtiva={abaAtiva} onTrocarAba={setAbaAtiva} />
