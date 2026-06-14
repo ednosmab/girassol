@@ -1,15 +1,11 @@
 import { useState, useEffect } from 'react';
 
-const STORAGE_KEY = 'girassol_install_dismissed';
-
 let deferredPrompt: any = null;
 
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
-  if (!localStorage.getItem(STORAGE_KEY)) {
-    window.dispatchEvent(new CustomEvent('pwa-pode-instalar'));
-  }
+  window.dispatchEvent(new CustomEvent('pwa-pode-instalar'));
 });
 
 export async function acionarInstalacaoPWA(): Promise<string> {
@@ -18,7 +14,6 @@ export async function acionarInstalacaoPWA(): Promise<string> {
   deferredPrompt.prompt();
 
   const { outcome } = await deferredPrompt.userChoice;
-  localStorage.setItem(STORAGE_KEY, 'true');
   deferredPrompt = null;
   return outcome;
 }
@@ -27,8 +22,6 @@ export function InstallPrompt() {
   const [visivel, setVisivel] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem(STORAGE_KEY)) return;
-
     const handler = () => setVisivel(true);
     window.addEventListener('pwa-pode-instalar', handler);
     return () => window.removeEventListener('pwa-pode-instalar', handler);
@@ -91,10 +84,7 @@ export function InstallPrompt() {
         Instalar
       </button>
       <button
-        onClick={() => {
-          localStorage.setItem(STORAGE_KEY, 'true');
-          setVisivel(false);
-        }}
+        onClick={() => setVisivel(false)}
         aria-label="Fechar"
         style={{
           background: 'transparent',
