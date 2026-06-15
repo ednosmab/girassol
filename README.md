@@ -16,45 +16,90 @@ Cultivating delicate plants like sunflowers requires rigor in checking soil mois
 ## 🛠️ Tecnologias Usadas
 
 * **Core Interface:** HTML5 semântico estruturado no padrão SPA (Single Page Application) com controle de visualizações síncronas.
-* **Typography & Design System:** Google Fonts (*Playfair Display*, *Caveat*, *Plus Jakarta Sans*) aplicados sob uma paleta botânica personalizada.
+* **Typography & Design System:** Google Fonts (*Caveat*, *Plus Jakarta Sans*) aplicados sob uma paleta botânica personalizada.
 * **Engine de Persistência:** **IndexedDB** via `localforage` para armazenamento transacional seguro, assíncrono e não volátil diretamente no dispositivo da usuária.
 * **PWA Capability & Push:** Service Workers ativos para tratamento offline, escuta de estados reativos e push nativo no sistema operacional.
-* **Cloud Infrastructure:** Configuração de deploy integrada na **Vercel** com cabeçalhos agressivos de revalidação de cache.
+* **Cloud Infrastructure:** Deploy na **Vercel** com **Upstash Redis (Vercel KV)** para armazenamento de subscriptions e **Vercel Cron** para disparo matutino de notificações.
+
+## ⏰ Sistema de Notificações Push Matutino
+
+A aplicação contorna as restrições de push em segundo plano dos navegadores (especialmente iOS) utilizando uma arquitetura serverless:
+
+| Componente | Função |
+|---|---|
+| **Vercel Cron** | Dispara `/api/verificar-lembretes` todo dia às 8h BRT (11:00 UTC) |
+| **Upstash Redis (KV)** | Armazena subscriptions Push e timers de lembretes |
+| **web-push** | Envia payload criptografado para o browser via protocolo Web Push |
+| **Service Worker** | Escuta evento `push` e exibe notificação na tela de bloqueio |
+
+### Fluxo do Usuário
+
+```
+1. Usuário clica "Registrei que Reguei"
+   → Client: PushManager.subscribe() obtém subscription
+   → Client: POST /api/salvar-subscription → salva no KV
+
+2. Vercel Cron (8h BRT): varre KV por lembretes vencidos
+   → Server: kv.keys('lembrete:*') → compara dataDisparo <= agora
+   → Server: webpush.sendNotification() → payload para o browser
+
+3. Service Worker recebe push → showNotification() → 📱 tela de bloqueio
+```
+
+### Intervalos de Lembrete
+
+| Ação | Intervalo | Recorrência |
+|---|---|---|
+| 💧 Rega | 2 dias | Único (reagenda ao registrar) |
+| ☀️ Sol | 1 dia | Diário |
+| 🌱 Adubo | 15 dias | Único (reagenda ao registrar) |
 
 ## 📁 Estrutura do Projeto
 
 ```
-src/
-├── core/
-│   ├── database/
-│   │   └── localforage-db.ts            # Interface IndexedDB via localforage
-│   └── use-cases/
-│       ├── registrar-cuidado.ts          # Registro de ações (rega/sol/adubo)
-│       ├── buscar-historico.ts           # Consulta ao histórico
-│       ├── gerenciar-lembretes.ts        # CRUD de lembretes
-│       ├── agendar-notificacao.ts        # Geração de links Google Calendar
-│       └── notificacao-nativa.ts         # Notificações nativas via Service Worker
-├── ui/
-│   ├── components/
-│   │   ├── Header.tsx                   # Cabeçalho da aplicação
-│   │   ├── Navigation.tsx               # Navegação entre abas
-│   │   ├── AgendaBox.tsx                # Box de notificação de cuidados
-│   │   └── InstallPrompt.tsx            # Prompt de instalação PWA
-│   └── views/
-│       ├── DiarioView.tsx               # Tela principal de registro
-│       └── CuidadosView.tsx             # Tela de resumo e histórico
-├── __tests__/                           # Suíte de testes Jest
-├── App.tsx                              # Componente raiz com Page Visibility API
-└── main.tsx                             # Ponto de entrada
+├── api/
+│   ├── salvar-subscription.ts      # POST: salva subscription no Vercel KV
+│   └── verificar-lembretes.ts      # Cron: envia Web Push matutino
+├── src/
+│   ├── core/
+│   │   ├── database/
+│   │   │   └── localforage-db.ts   # Interface IndexedDB via localforage
+│   │   └── use-cases/
+│   │       ├── registrar-cuidado.ts
+│   │       ├── buscar-historico.ts
+│   │       ├── gerenciar-lembretes.ts
+│   │       ├── agendar-notificacao.ts
+│   │       └── notificacao-nativa.ts  # Push subscription + agendarLembrete
+│   ├── ui/
+│   │   ├── components/
+│   │   │   ├── Header.tsx
+│   │   │   ├── Navigation.tsx
+│   │   │   ├── AgendaBox.tsx          # Botões pétala + countdown
+│   │   │   └── InstallPrompt.tsx      # beforeinstallprompt popup
+│   │   └── views/
+│   │       ├── DiarioView.tsx
+│   │       └── CuidadosView.tsx
+│   ├── __tests__/                     # Suíte de testes Jest (22 testes)
+│   ├── App.tsx
+│   └── main.tsx
+├── public/
+│   └── sw-custom.js               # Push + notificationclick handlers
+├── vercel.json                     # Cron + rewrites + cache headers
+├── vite.config.ts                  # VitePWA com importScripts
+└── README.md
 ```
 
-## 🔔 Sistema de Notificações Nativas
+## 🔧 Variáveis de Ambiente
 
-Para contornar as restrições de processos em segundo plano dos navegadores mobile, a aplicação utiliza a **Web Notification API** vinculada ao Service Worker:
-
-1. **Solicitação de Permissão:** Ao clicar em um botão de notificação, o app solicita `Notification.requestPermission()` de forma dinâmica.
-2. **Disparo Nativo:** Utiliza `registration.showNotification()` para exibir alertas na tela de bloqueio do celular, mesmo com o app fechado.
-3. **Instalação PWA:** O evento `beforeinstallprompt` é capturado para exibir um prompt customizado de instalação, permitindo fixar o ícone na tela inicial.
+| Variável | Escopo | Descrição |
+|---|---|---|
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Client | Chave pública VAPID para PushManager.subscribe() |
+| `VAPID_PRIVATE_KEY` | Server | Chave privada VAPID para webpush.sendNotification() |
+| `KV_URL` | Server | URL do Upstash Redis |
+| `KV_REST_API_URL` | Server | Endpoint REST do KV |
+| `KV_REST_API_TOKEN` | Server | Token de escrita do KV |
+| `KV_REST_API_READ_ONLY_TOKEN` | Server | Token de leitura do KV |
+| `CRON_SECRET` | Server | Secret para autenticar o Vercel Cron |
 
 ## 📋 Comandos Disponíveis
 

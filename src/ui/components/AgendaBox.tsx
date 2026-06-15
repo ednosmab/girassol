@@ -1,4 +1,5 @@
-import { agendarLembrete } from '../../core/use-cases/notificacao-nativa';
+import { useState, useEffect } from 'react';
+import { agendarLembrete, obterProximoLembrete } from '../../core/use-cases/notificacao-nativa';
 
 interface AgendaBoxProps {
   onCuidadoRegistrado?: () => void;
@@ -11,8 +12,23 @@ const tiposCuidado: { tipo: 'rega' | 'sol' | 'adubo'; label: string; icone: stri
 ];
 
 export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
+  const [proximos, setProximos] = useState<Record<string, string | null>>({});
+
+  const carregarCountdowns = () => {
+    setProximos({
+      rega: obterProximoLembrete('rega'),
+      sol: obterProximoLembrete('sol'),
+      adubo: obterProximoLembrete('adubo')
+    });
+  };
+
+  useEffect(() => {
+    carregarCountdowns();
+  }, []);
+
   const handleAgendar = async (tipo: 'rega' | 'sol' | 'adubo') => {
     await agendarLembrete(tipo);
+    carregarCountdowns();
     onCuidadoRegistrado?.();
   };
 
@@ -51,7 +67,7 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
         gap: '15px',
         marginBottom: '25px'
       }}>
-        {tiposCuidado.map(({ tipo, label }) => (
+        {tiposCuidado.map(({ tipo, label, cor }) => (
           <div key={tipo} style={{
             background: '#FFFDF9',
             borderRadius: '20px',
@@ -66,6 +82,15 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
               color: '#7A7A7A'
             }}>
               {label === 'Rega' ? 'Última Rega' : label === 'Sol' ? 'Banho de Sol' : 'Último Adubo'}
+            </span>
+            <span style={{
+              display: 'block',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              color: proximos[tipo] === 'Vence hoje!' ? '#E63946' : cor,
+              marginTop: '4px'
+            }}>
+              {proximos[tipo] || 'Sem agendamento'}
             </span>
           </div>
         ))}
