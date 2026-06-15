@@ -14,9 +14,20 @@ export function ModalBoasVindas({ onFechar }: ModalBoasVindasProps) {
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 10000,
-        padding: '20px'
+        padding: '20px',
+        animation: 'fadeIn 0.3s ease-out'
       }}
     >
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes scaleUp {
+          from { transform: scale(0.8); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+      `}</style>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -26,7 +37,8 @@ export function ModalBoasVindas({ onFechar }: ModalBoasVindasProps) {
           maxWidth: '380px',
           width: '100%',
           boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-          textAlign: 'center'
+          textAlign: 'center',
+          animation: 'scaleUp 0.3s ease-out'
         }}
       >
         <p style={{

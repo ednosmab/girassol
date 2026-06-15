@@ -51,7 +51,8 @@ export default defineConfig({
         name: 'Meu Girassol',
         short_name: 'Girassol',
         description: 'Diário Interativo de Cuidados',
-        theme_color: '#ffffff',
+        theme_color: '#D98E04',
+        background_color: '#D98E04',
         display: 'standalone',
         start_url: '/',
         icons: [

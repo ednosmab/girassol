@@ -41,8 +41,15 @@ export function InstallPrompt() {
       boxShadow: '0 -4px 20px rgba(0,0,0,0.3)',
       display: 'flex',
       alignItems: 'center',
-      gap: '12px'
+      gap: '12px',
+      animation: 'slideUp 0.4s ease-out'
     }}>
+      <style>{`
+        @keyframes slideUp {
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
+        }
+      `}</style>
       <span style={{ fontSize: '2rem' }}>📲</span>
       <div style={{ flex: 1 }}>
         <p style={{
