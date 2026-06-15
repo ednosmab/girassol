@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { agendarLembrete, obterProximoLembrete } from '../../core/use-cases/notificacao-nativa';
+import { agendarLembrete, obterUltimoCuidado } from '../../core/use-cases/notificacao-nativa';
 import { registrarCuidadoComOutbox } from '../../core/use-cases/registrar-cuidado-com-outbox';
 
 interface AgendaBoxProps {
@@ -17,9 +17,9 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
 
   const carregarCountdowns = async () => {
     setProximos({
-      rega: await obterProximoLembrete('rega'),
-      sol: await obterProximoLembrete('sol'),
-      adubo: await obterProximoLembrete('adubo')
+      rega: await obterUltimoCuidado('rega'),
+      sol: await obterUltimoCuidado('sol'),
+      adubo: await obterUltimoCuidado('adubo')
     });
   };
 

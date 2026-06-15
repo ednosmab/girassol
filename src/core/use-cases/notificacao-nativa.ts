@@ -137,3 +137,38 @@ export async function obterProximoLembrete(tipo: 'rega' | 'sol' | 'adubo'): Prom
   if (!ultimoTimestamp) return null;
   return calcularDiasRestantes(ultimoTimestamp, tipo);
 }
+
+export async function obterUltimoCuidado(tipo: 'rega' | 'sol' | 'adubo'): Promise<string | null> {
+  let ultimoTimestamp: string | null = null;
+
+  await db.cuidados.iterate<{ tipo: string; timestamp: string; criadoEm: number }, void>((value) => {
+    if (value.tipo === tipo && (!ultimoTimestamp || value.criadoEm > new Date(ultimoTimestamp).getTime())) {
+      ultimoTimestamp = value.timestamp;
+    }
+  });
+
+  if (!ultimoTimestamp) return null;
+
+  const dataUltimo = new Date(ultimoTimestamp);
+  const hoje = new Date();
+
+  const mesmoDia = dataUltimo.getDate() === hoje.getDate() &&
+    dataUltimo.getMonth() === hoje.getMonth() &&
+    dataUltimo.getFullYear() === hoje.getFullYear();
+
+  if (mesmoDia) return 'Hoje';
+
+  const ontem = new Date(hoje);
+  ontem.setDate(ontem.getDate() - 1);
+  const foiOntem = dataUltimo.getDate() === ontem.getDate() &&
+    dataUltimo.getMonth() === ontem.getMonth() &&
+    dataUltimo.getFullYear() === ontem.getFullYear();
+
+  if (foiOntem) return 'Ontem';
+
+  return dataUltimo.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+}
