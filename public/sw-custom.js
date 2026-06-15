@@ -4,8 +4,7 @@ self.addEventListener('push', (event) => {
     const dados = event.data.json();
     const options = {
       body: dados.body,
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      icon: dados.image || '/icon-192.png',
       image: dados.image || '/icon-192.png',
       vibrate: [300, 100, 300],
       data: { dateOfArrival: Date.now() }
@@ -19,6 +18,15 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
-    clients.openWindow('/')
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes('/') && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
+    })
   );
 });

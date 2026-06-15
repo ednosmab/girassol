@@ -2,40 +2,59 @@ import { useState, useEffect } from 'react';
 import { buscarHistorico } from '../../core/use-cases/buscar-historico';
 import { obterProximoLembrete } from '../../core/use-cases/notificacao-nativa';
 import { AgendaBox } from '../components/AgendaBox';
+import { db, gerarIdUnico } from '../../core/database/localforage-db';
 
 export function DiarioView() {
   const [textoLembrete, setTextoLembrete] = useState('');
-  const [lembretes, setLembretes] = useState<string[]>([]);
+  const [lembretes, setLembretes] = useState<{ id: string; titulo: string }[]>([]);
   const [proximos, setProximos] = useState<Record<string, string | null>>({});
 
   const carregarHistorico = async () => {
     await buscarHistorico();
     setProximos({
-      rega: obterProximoLembrete('rega'),
-      sol: obterProximoLembrete('sol'),
-      adubo: obterProximoLembrete('adubo')
+      rega: await obterProximoLembrete('rega'),
+      sol: await obterProximoLembrete('sol'),
+      adubo: await obterProximoLembrete('adubo')
     });
+  };
+
+  const carregarLembretes = async () => {
+    const items: { id: string; titulo: string }[] = [];
+    await db.lembretes.iterate<{ id?: string; titulo: string; ativo: boolean }, void>((value) => {
+      if (value.ativo) {
+        items.push({ id: value.id!, titulo: value.titulo });
+      }
+    });
+    setLembretes(items);
   };
 
   useEffect(() => {
     carregarHistorico();
-    const salvos = localStorage.getItem('girassol_lembretes');
-    if (salvos) setLembretes(JSON.parse(salvos));
+    carregarLembretes();
   }, []);
 
-  const adicionarLembrete = () => {
+  const adicionarLembrete = async () => {
     const texto = textoLembrete.trim();
     if (!texto) return;
-    const novos = [...lembretes, texto];
-    setLembretes(novos);
-    localStorage.setItem('girassol_lembretes', JSON.stringify(novos));
+    const id = gerarIdUnico();
+    await db.lembretes.setItem(id, {
+      id,
+      titulo: texto,
+      mensagem: '',
+      dataAgendada: new Date().toISOString(),
+      ativo: true,
+      criadoEm: Date.now()
+    });
     setTextoLembrete('');
+    await carregarLembretes();
   };
 
-  const removerLembrete = (index: number) => {
-    const novos = lembretes.filter((_, i) => i !== index);
-    setLembretes(novos);
-    localStorage.setItem('girassol_lembretes', JSON.stringify(novos));
+  const removerLembrete = async (id: string) => {
+    const lembrete = await db.lembretes.getItem(id);
+    if (lembrete) {
+      await db.lembretes.setItem(id, { ...lembrete, ativo: false });
+    }
+    await carregarLembretes();
   };
 
   return (
@@ -135,8 +154,8 @@ export function DiarioView() {
           </button>
         </div>
         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-          {lembretes.map((item, index) => (
-            <li key={index} style={{
+          {lembretes.map((item) => (
+            <li key={item.id} style={{
               background: '#FFFDF9',
               padding: '12px 20px',
               borderRadius: '15px',
@@ -147,9 +166,9 @@ export function DiarioView() {
               fontSize: '0.95rem',
               borderLeft: '4px solid #F2B705'
             }}>
-              <span>{item}</span>
+              <span>{item.titulo}</span>
               <button
-                onClick={() => removerLembrete(index)}
+                onClick={() => removerLembrete(item.id)}
                 style={{
                   background: 'transparent',
                   border: 'none',

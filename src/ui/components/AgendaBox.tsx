@@ -14,11 +14,11 @@ const tiposCuidado: { tipo: 'rega' | 'sol' | 'adubo'; label: string; icone: stri
 export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
   const [proximos, setProximos] = useState<Record<string, string | null>>({});
 
-  const carregarCountdowns = () => {
+  const carregarCountdowns = async () => {
     setProximos({
-      rega: obterProximoLembrete('rega'),
-      sol: obterProximoLembrete('sol'),
-      adubo: obterProximoLembrete('adubo')
+      rega: await obterProximoLembrete('rega'),
+      sol: await obterProximoLembrete('sol'),
+      adubo: await obterProximoLembrete('adubo')
     });
   };
 

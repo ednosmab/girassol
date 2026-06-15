@@ -1,3 +1,5 @@
+import { db } from '../database/localforage-db';
+
 const VAPID_PUBLIC_KEY = 'BLCM5F8Z0KLjyaXgCiDcFKl1JTr1u4tsRuliqSYqsuWIuUvHv7B6HbWj2kpytijo3nRZDUHkCJGshSucF20ND1w';
 
 export async function solicitarPermissaoEAtivarNotificacoes(): Promise<boolean> {
@@ -57,8 +59,6 @@ export async function agendarLembrete(
 
   const timestamp = new Date().toISOString();
 
-  localStorage.setItem(`girassol_${tipo}`, timestamp);
-
   try {
     const response = await fetch('/api/salvar-subscription', {
       method: 'POST',
@@ -86,7 +86,6 @@ export async function dispararNotificacaoNativa(
     registration.showNotification(titulo, {
       body: mensagem,
       icon: '/icon-192.png',
-      badge: '/icon-192.png',
       tag: 'cuidado-girassol',
       vibrate: [200, 100, 200]
     } as NotificationOptions & { vibrate?: number[] });
@@ -107,11 +106,8 @@ export const DescricoesNotificacao: Record<'rega' | 'sol' | 'adubo', string> = {
   adubo: 'Dia de colocar o fertilizante rico em nitrogênio para crescer forte!'
 };
 
-export function obterProximoLembrete(tipo: 'rega' | 'sol' | 'adubo'): string | null {
-  const salvo = localStorage.getItem(`girassol_${tipo}`);
-  if (!salvo) return null;
-
-  const dataUltimo = new Date(salvo);
+export function calcularDiasRestantes(timestamp: string, tipo: 'rega' | 'sol' | 'adubo'): string {
+  const dataUltimo = new Date(timestamp);
   const dias = tipo === 'adubo' ? 15 : tipo === 'rega' ? 2 : 1;
   const dataProxima = new Date(dataUltimo);
   dataProxima.setDate(dataProxima.getDate() + dias);
@@ -122,4 +118,17 @@ export function obterProximoLembrete(tipo: 'rega' | 'sol' | 'adubo'): string | n
 
   if (diffDias <= 0) return 'Vence hoje!';
   return `${diffDias} dia(s)`;
+}
+
+export async function obterProximoLembrete(tipo: 'rega' | 'sol' | 'adubo'): Promise<string | null> {
+  let ultimoTimestamp: string | null = null;
+
+  await db.cuidados.iterate<{ tipo: string; timestamp: string; criadoEm: number }, void>((value) => {
+    if (value.tipo === tipo && (!ultimoTimestamp || value.criadoEm > new Date(ultimoTimestamp).getTime())) {
+      ultimoTimestamp = value.timestamp;
+    }
+  });
+
+  if (!ultimoTimestamp) return null;
+  return calcularDiasRestantes(ultimoTimestamp, tipo);
 }
