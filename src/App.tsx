@@ -24,6 +24,11 @@ export default function App() {
       console.log('[Girassol] SW ativo:', reg.active?.scriptURL || 'nenhum');
     });
 
+    const enviarSkipWaiting = (worker: ServiceWorker) => {
+      console.log('[Girassol] SKIP_WAITING_SENT');
+      worker.postMessage({ type: 'SKIP_WAITING' });
+    };
+
     const handleVisibility = async () => {
       if (document.visibilityState === 'hidden') {
         console.log('[Girassol] APP_HIDDEN');
@@ -32,17 +37,24 @@ export default function App() {
           const registration = await navigator.serviceWorker.ready;
           console.log('[Girassol] CHECKING_FOR_UPDATE');
 
-          const newWorker = await registration.update();
+          await registration.update();
 
-          if (newWorker) {
-            console.log('[Girassol] UPDATE_FOUND:', newWorker.scope);
-          } else {
-            console.log('[Girassol] NO_UPDATE');
+          if (registration.waiting) {
+            console.log('[Girassol] UPDATE_FOUND');
+            enviarSkipWaiting(registration.waiting);
+            return;
           }
 
-          if (newWorker && newWorker.waiting) {
-            console.log('[Girassol] SKIP_WAITING_SENT');
-            newWorker.waiting.postMessage({ type: 'SKIP_WAITING' });
+          if (registration.installing) {
+            console.log('[Girassol] SW_INSTALLING — aguardando installed');
+            registration.installing.addEventListener('statechange', (e) => {
+              const target = e.target as ServiceWorker;
+              if (target.state === 'installed') {
+                enviarSkipWaiting(target);
+              }
+            });
+          } else {
+            console.log('[Girassol] NO_UPDATE');
           }
         } catch (error) {
           console.warn('[Girassol] UPDATE_FAILED:', error);
