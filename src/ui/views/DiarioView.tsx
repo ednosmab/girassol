@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { buscarHistorico } from '../../core/use-cases/buscar-historico';
 import { obterProximoLembrete, obterTiposSemRegistro } from '../../core/use-cases/notificacao-nativa';
 import { AgendaBox } from '../components/AgendaBox';
@@ -39,6 +39,15 @@ export function DiarioView() {
     });
   }, []);
 
+  const textoRef = useRef<HTMLTextAreaElement>(null);
+
+  const autoResize = () => {
+    const el = textoRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+  };
+
   const adicionarLembrete = async () => {
     const texto = textoLembrete.trim();
     if (!texto) return;
@@ -52,6 +61,7 @@ export function DiarioView() {
       criadoEm: Date.now()
     });
     setTextoLembrete('');
+    if (textoRef.current) textoRef.current.style.height = 'auto';
     await carregarLembretes();
   };
 
@@ -127,20 +137,31 @@ export function DiarioView() {
         }}>
           📝 Anotações e Lembretes Importantes
         </h3>
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-          <input
-            type="text"
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', alignItems: 'flex-end' }}>
+          <textarea
+            ref={textoRef}
             value={textoLembrete}
-            onChange={(e) => setTextoLembrete(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && adicionarLembrete()}
+            onChange={(e) => { setTextoLembrete(e.target.value); autoResize(); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                adicionarLembrete();
+              }
+            }}
             placeholder="Ex: Brotou uma folhinha nova hoje..."
+            rows={1}
             style={{
               flex: 1,
               padding: '12px 20px',
               borderRadius: '20px',
               border: '1px solid #E0E0E0',
               fontFamily: "'Plus Jakarta Sans', sans-serif",
-              fontSize: '0.95rem'
+              fontSize: '0.95rem',
+              resize: 'none',
+              overflow: 'hidden',
+              minHeight: '44px',
+              maxHeight: '100px',
+              lineHeight: '1.5'
             }}
           />
           <button
