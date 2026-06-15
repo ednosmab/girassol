@@ -29,9 +29,12 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
 
   const handleAgendar = async (tipo: 'rega' | 'sol' | 'adubo') => {
     await registrarCuidadoComOutbox({ tipo });
-    await agendarLembrete(tipo);
     await carregarCountdowns();
     onCuidadoRegistrado?.();
+
+    void agendarLembrete(tipo).catch((error) => {
+      console.error('Falha ao agendar lembrete:', error);
+    });
   };
 
   return (
