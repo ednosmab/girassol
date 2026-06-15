@@ -1,119 +1,176 @@
-# 🌻 Meu Girassol - Diário Interativo de Cuidados
+# 🌻 Meu Girassol — Jardim Secreto
 
-An application crafted with premium design principles and specialized accessibility architecture, developed to simplify and enrich the daily care routine for a beloved family member.
+Diário interativo de cuidados com girassol. PWA offline first com sincronização automática, notificações push e experiência centrada na usuária.
 
-## 🎯 O Propósito do Projeto
+## 🎯 Propósito
 
-Cultivating delicate plants like sunflowers requires rigor in checking soil moisture, exposure to sunlight, and chemical fertilization cycles. This software replaces passive interfaces or easy-to-forget paper notes with an interactive digital ecosystem that guides the user safely and clearly.
+Cultivar girassol exige rigor em ciclos de rega, exposição solar e adubação. Este aplicativo substitui anotações passageiras por um ecossistema digital que guia a usuária com clareza, mesmo sem internet.
 
-### Problemas que a Solução Resolve:
+## ✅ Funcionalidades implementadas
 
-* **Esquecimento de Ciclos:** Centraliza a última data/hora exata em que a planta foi cuidada, sem demandar logins ou cadastros complexos.
-* **Complexidade Tecnológica (Acessibilidade):** Interface minimalista baseada em botões táteis no formato de pétalas e tipografia de alta legibilidade, ideal para uso móvel intuitivo.
-* **Notificações de Sistema Reais:** Utiliza a Web Notification API em conjunto com Service Workers para disparar alertas nativos diretamente na tela de bloqueio do celular, garantindo atenção imediata.
-* **Experiência Própria (PWA):** Captura ativa de instalação para fixar o ícone do aplicativo diretamente na tela inicial do celular.
+### Registro de cuidados
+- Botões pétala para registrar rega, sol e adubo
+- Countdown visual para próxima ação
+- Persistência local via IndexedDB (localforage)
 
-## 🛠️ Tecnologias Usadas
+### Notificações push matutinas
+- Vercel Cron às 8h BRT envia lembretes via web-push
+- Service Worker exibe notificação na tela de bloqueio
+- Intervalos: rega (2 dias), sol (diário), adubo (15 dias)
 
-* **Core Interface:** HTML5 semântico estruturado no padrão SPA (Single Page Application) com controle de visualizações síncronas.
-* **Typography & Design System:** Google Fonts (*Caveat*, *Plus Jakarta Sans*) aplicados sob uma paleta botânica personalizada.
-* **Engine de Persistência:** **IndexedDB** via `localforage` para armazenamento transacional seguro, assíncrono e não volátil diretamente no dispositivo da usuária.
-* **PWA Capability & Push:** Service Workers ativos para tratamento offline, escuta de estados reativos e push nativo no sistema operacional.
-* **Cloud Infrastructure:** Deploy na **Vercel** com **Upstash Redis (Vercel KV)** para armazenamento de subscriptions e **Vercel Cron** para disparo matutino de notificações.
+### PWA completa
+- Instalação na tela inicial do celular
+- Ícone personalizado (girassol)
+- Cache inteligente via Workbox
+- Atualização automática do Service Worker
 
-## ⏰ Sistema de Notificações Push Matutino
+### Offline first (arquitetura por eventos)
+- **Outbox Pattern**: toda operação é registrada localmente antes de sincronizar
+- **Sincronização automática**: processa fila ao detectar conexão
+- **Feedback visual**: banner discreto com estado da sincronização
+- **Idempotência**: eventos não são processados em duplicidade
+- **Retentativas**: falhas são reattemptadas automaticamente
 
-A aplicação contorna as restrições de push em segundo plano dos navegadores (especialmente iOS) utilizando uma arquitetura serverless:
+### Estados de sincronização
 
-| Componente | Função |
+| Estado | Mensagem |
 |---|---|
-| **Vercel Cron** | Dispara `/api/verificar-lembretes` todo dia às 8h BRT (11:00 UTC) |
-| **Upstash Redis (KV)** | Armazena subscriptions Push e timers de lembretes |
-| **web-push** | Envia payload criptografado para o browser via protocolo Web Push |
-| **Service Worker** | Escuta evento `push` e exibe notificação na tela de bloqueio |
+| Offline | 📶 Sem internet. Continue registrando seus cuidados normalmente. |
+| Sincronizando | ⏳ Atualizando suas anotações... |
+| Sincronizado | ✅ Tudo atualizado |
+| Erro | ⚠️ Não foi possível atualizar. Tentaremos novamente. |
 
-### Fluxo do Usuário
+## 🏗️ Arquitetura
 
 ```
-1. Usuário clica "Registrei que Reguei"
-   → Client: PushManager.subscribe() obtém subscription
-   → Client: POST /api/salvar-subscription → salva no KV
-
-2. Vercel Cron (8h BRT): varre KV por lembretes vencidos
-   → Server: kv.keys('lembrete:*') → compara dataDisparo <= agora
-   → Server: webpush.sendNotification() → payload para o browser
-
-3. Service Worker recebe push → showNotification() → 📱 tela de bloqueio
+Usuária
+   ↓
+Interface (React)
+   ↓
+Casos de uso
+   ↓
+Outbox Local (IndexedDB)
+   ↓
+Sincronizador (online/offline)
+   ↓
+API Serverless (Vercel)
+   ↓
+Redis (Upstash)
+   ↓
+Cron Jobs → Push Notifications
 ```
 
-### Intervalos de Lembrete
-
-| Ação | Intervalo | Recorrência |
-|---|---|---|
-| 💧 Rega | 2 dias | Único (reagenda ao registrar) |
-| ☀️ Sol | 1 dia | Diário |
-| 🌱 Adubo | 15 dias | Único (reagenda ao registrar) |
-
-## 📁 Estrutura do Projeto
+## 📁 Estrutura do projeto
 
 ```
 ├── api/
-│   ├── salvar-subscription.ts      # POST: salva subscription no Vercel KV
-│   └── verificar-lembretes.ts      # Cron: envia Web Push matutino
+│   ├── salvar-subscription.ts      # POST: salva subscription Push no KV
+│   ├── verificar-lembretes.ts      # Cron: envia Web Push matutino
+│   └── sync-events.ts             # POST: recebe eventos da outbox
 ├── src/
 │   ├── core/
+│   │   ├── contexts/
+│   │   │   └── SyncContext.tsx     # Contexto React de sincronização
 │   │   ├── database/
-│   │   │   └── localforage-db.ts   # Interface IndexedDB via localforage
+│   │   │   ├── localforage-db.ts   # IndexedDB (cuidados + lembretes)
+│   │   │   └── outbox-store.ts     # Fila de eventos offline
+│   │   ├── types/
+│   │   │   └── sync.ts            # Tipos SyncState, OutboxEvent
 │   │   └── use-cases/
 │   │       ├── registrar-cuidado.ts
+│   │       ├── registrar-cuidado-com-outbox.ts
 │   │       ├── buscar-historico.ts
 │   │       ├── gerenciar-lembretes.ts
 │   │       ├── agendar-notificacao.ts
-│   │       └── notificacao-nativa.ts  # Push subscription + agendarLembrete
+│   │       └── notificacao-nativa.ts
 │   ├── ui/
 │   │   ├── components/
 │   │   │   ├── Header.tsx
 │   │   │   ├── Navigation.tsx
-│   │   │   ├── AgendaBox.tsx          # Botões pétala + countdown
-│   │   │   └── InstallPrompt.tsx      # beforeinstallprompt popup
+│   │   │   ├── AgendaBox.tsx
+│   │   │   ├── InstallPrompt.tsx
+│   │   │   ├── SyncStatus.tsx      # Banner de estado offline/online
+│   │   │   └── TestarPush.tsx
 │   │   └── views/
 │   │       ├── DiarioView.tsx
 │   │       └── CuidadosView.tsx
-│   ├── __tests__/                     # Suíte de testes Jest (22 testes)
+│   ├── __tests__/                  # 9 suítes / 63 testes
 │   ├── App.tsx
 │   └── main.tsx
 ├── public/
-│   └── sw-custom.js               # Push + notificationclick handlers
-├── vercel.json                     # Cron + rewrites + cache headers
-├── vite.config.ts                  # VitePWA com importScripts
-└── README.md
+│   ├── sw-custom.js               # Push + notificationclick
+│   ├── icon-192.png
+│   ├── icon-512.png
+│   └── favicon.png
+├── test-push-staging.sh           # Script de teste de push
+├── vercel.json
+├── vite.config.ts
+└── package.json
 ```
 
-## 🔧 Variáveis de Ambiente
+## 🧪 Testes
+
+### Cobertura
+
+| Suíte | Testes | O que valida |
+|---|---|---|
+| `outbox.spec.ts` | 13 | Criação, status, retries, remoção, ordenação |
+| `sincronizador.spec.ts` | 10 | Fluxo online/offline, retentativas, idempotência |
+| `offline-integracao.spec.ts` | 5 | registrarCuidadoComOutbox + IndexedDB + outbox |
+| `notificacao-push.spec.ts` | 8 | Countdown, títulos, descrições |
+| `notificacao-nativa.spec.ts` | 4 | Títulos e descrições de notificação |
+| `registrar-cuidado.spec.ts` | 4 | Schema Zod de validação |
+| `gerenciar-lembretes.spec.ts` | 4 | Schema Zod de lembretes |
+| `agendar-notificacao.spec.ts` | 3 | Google Calendar URL |
+| `build.spec.ts` | 12 | Arquivos de build existentes |
+| **Total** | **63** | |
+
+### Executar
+
+```bash
+npm test              # Todos os testes
+npm run test:coverage # Com cobertura
+```
+
+## 🔧 Variáveis de ambiente
 
 | Variável | Escopo | Descrição |
 |---|---|---|
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Client | Chave pública VAPID para PushManager.subscribe() |
-| `VAPID_PRIVATE_KEY` | Server | Chave privada VAPID para webpush.sendNotification() |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Client | Chave pública VAPID |
+| `VAPID_PRIVATE_KEY` | Server | Chave privada VAPID |
 | `KV_URL` | Server | URL do Upstash Redis |
 | `KV_REST_API_URL` | Server | Endpoint REST do KV |
-| `KV_REST_API_TOKEN` | Server | Token de escrita do KV |
-| `KV_REST_API_READ_ONLY_TOKEN` | Server | Token de leitura do KV |
-| `CRON_SECRET` | Server | Secret para autenticar o Vercel Cron |
+| `KV_REST_API_TOKEN` | Server | Token de escrita |
+| `KV_REST_API_READ_ONLY_TOKEN` | Server | Token de leitura |
+| `CRON_SECRET` | Server | Secret para Vercel Cron |
 
-## 📋 Comandos Disponíveis
+## 📋 Comandos
 
 ```bash
-npm install          # Instalação de dependências
-npm run dev          # Desenvolvimento local
-npm run build        # Build de produção
-npm test             # Executar testes Jest
-npm run test:coverage # Testes com cobertura
-npm run lint         # Verificação de tipos TypeScript
+npm install           # Instalar dependências
+npm run dev           # Desenvolvimento local
+npm run build         # Build de produção
+npm test              # Executar testes
+npm run lint          # Verificar tipos TypeScript
 ```
 
-## 🔮 Sugestões para Evoluções Futuras
+## 🧪 Teste de push no staging
 
-1. **Engine de Análise de Padrões:** Mensagens motivacionais baseadas na frequência de cuidados.
-2. **Histórico Visual Expandido:** Galeria de fotos integrada ao armazenamento local.
-3. **Backup Cloud via Supabase:** Sincronização opcional em nuvem para proteção de dados.
+```bash
+# 1. Abra o deploy preview com ?test
+# https://girassol-xxxxx.vercel.app/?test
+
+# 2. Clique no botão 🧪 → 💧 → Cole CRON_SECRET → Disparar
+
+# 3. Notificação chega imediatamente
+```
+
+## 🚀 Deploy
+
+- **Produção**: branch `main` → Vercel
+- **Staging**: branch `staging` → Vercel Preview
+- **Cron**: `0 11 * * *` (8h BRT) via vercel.json
+
+## 📄 Licença
+
+Desenvolvido com amor para a melhor sogra do mundo.
