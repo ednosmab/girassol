@@ -15,20 +15,32 @@ export default function App() {
   const [abaAtiva, setAbaAtiva] = useState('diario');
 
   useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    let swAtualController: ServiceWorker | null = null;
+
+    navigator.serviceWorker.ready.then((reg) => {
+      swAtualController = reg.active;
+    });
+
     const handleVisibility = async () => {
+      if (document.visibilityState === 'hidden') {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          const newWorker = await registration.update();
+          if (newWorker && newWorker.waiting) {
+            newWorker.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+        } catch (error) {
+          console.warn('Service Worker update failed:', error);
+        }
+      }
+
       if (document.visibilityState === 'visible') {
         await buscarHistorico();
 
-        if ('serviceWorker' in navigator) {
-          try {
-            const registration = await navigator.serviceWorker.ready;
-            const newWorker = await registration.update();
-            if (newWorker) {
-              console.log('[Girassol] Novo Service Worker detectado');
-            }
-          } catch (error) {
-            console.warn('Service Worker update failed:', error);
-          }
+        if (navigator.serviceWorker.controller && navigator.serviceWorker.controller !== swAtualController) {
+          window.location.reload();
         }
       }
     };
@@ -36,24 +48,6 @@ export default function App() {
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!('serviceWorker' in navigator)) return;
-
-    let isRefreshing = false;
-
-    const handleControllerChange = () => {
-      if (!isRefreshing) {
-        isRefreshing = true;
-        window.location.reload();
-      }
-    };
-
-    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
-    return () => {
-      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
     };
   }, []);
 
