@@ -172,3 +172,18 @@ export async function obterUltimoCuidado(tipo: 'rega' | 'sol' | 'adubo'): Promis
     year: 'numeric'
   });
 }
+
+export async function obterTiposSemRegistro(): Promise<('rega' | 'sol' | 'adubo')[]> {
+  const tipos: ('rega' | 'sol' | 'adubo')[] = ['rega', 'sol', 'adubo'];
+  const faltantes: ('rega' | 'sol' | 'adubo')[] = [];
+
+  for (const tipo of tipos) {
+    let temRegistro = false;
+    await db.cuidados.iterate<{ tipo: string }, void>((value) => {
+      if (value.tipo === tipo) temRegistro = true;
+    });
+    if (!temRegistro) faltantes.push(tipo);
+  }
+
+  return faltantes;
+}

@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { buscarHistorico } from '../../core/use-cases/buscar-historico';
-import { obterProximoLembrete } from '../../core/use-cases/notificacao-nativa';
+import { obterProximoLembrete, obterTiposSemRegistro } from '../../core/use-cases/notificacao-nativa';
 import { AgendaBox } from '../components/AgendaBox';
+import { ModalBoasVindas } from '../components/ModalBoasVindas';
 import { db, gerarIdUnico } from '../../core/database/localforage-db';
 
 export function DiarioView() {
   const [textoLembrete, setTextoLembrete] = useState('');
   const [lembretes, setLembretes] = useState<{ id: string; titulo: string }[]>([]);
   const [proximos, setProximos] = useState<Record<string, string | null>>({});
+  const [modalAberto, setModalAberto] = useState(false);
 
   const carregarHistorico = async () => {
     await buscarHistorico();
@@ -31,6 +33,10 @@ export function DiarioView() {
   useEffect(() => {
     carregarHistorico();
     carregarLembretes();
+
+    obterTiposSemRegistro().then((faltantes) => {
+      if (faltantes.length > 0) setModalAberto(true);
+    });
   }, []);
 
   const adicionarLembrete = async () => {
@@ -184,6 +190,10 @@ export function DiarioView() {
           ))}
         </ul>
       </div>
+
+      {modalAberto && (
+        <ModalBoasVindas onFechar={() => setModalAberto(false)} />
+      )}
     </div>
   );
 }
