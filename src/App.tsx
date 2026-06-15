@@ -21,57 +21,43 @@ export default function App() {
 
     navigator.serviceWorker.ready.then((reg) => {
       swAtualController = reg.active;
-      console.log('[Girassol] SW ativo:', reg.active?.scriptURL || 'nenhum');
     });
 
     const enviarSkipWaiting = (worker: ServiceWorker) => {
-      console.log('[Girassol] SKIP_WAITING_SENT');
       worker.postMessage({ type: 'SKIP_WAITING' });
     };
 
     const handleVisibility = async () => {
       if (document.visibilityState === 'hidden') {
-        console.log('[Girassol] APP_HIDDEN');
-
         try {
           const registration = await navigator.serviceWorker.ready;
-          console.log('[Girassol] CHECKING_FOR_UPDATE');
-
           await registration.update();
 
           if (registration.waiting) {
-            console.log('[Girassol] UPDATE_FOUND');
             enviarSkipWaiting(registration.waiting);
             return;
           }
 
           if (registration.installing) {
-            console.log('[Girassol] SW_INSTALLING — aguardando installed');
             registration.installing.addEventListener('statechange', (e) => {
               const target = e.target as ServiceWorker;
               if (target.state === 'installed') {
                 enviarSkipWaiting(target);
               }
             });
-          } else {
-            console.log('[Girassol] NO_UPDATE');
           }
-        } catch (error) {
-          console.warn('[Girassol] UPDATE_FAILED:', error);
+        } catch {
+          // silently fail
         }
       }
 
       if (document.visibilityState === 'visible') {
-        console.log('[Girassol] APP_VISIBLE');
         await buscarHistorico();
 
         const controllerAtual = navigator.serviceWorker.controller;
         const mudou = controllerAtual && controllerAtual !== swAtualController;
 
-        console.log('[Girassol] CONTROLLER_CHANGED:', mudou);
-
         if (mudou) {
-          console.log('[Girassol] APP_RELOADED');
           window.location.reload();
         }
       }
