@@ -206,11 +206,17 @@ export function DiarioView() {
                 onClick={() => removerLembrete(item.id)}
                 style={{
                   background: 'transparent',
-                  border: 'none',
+                  border: '1.5px solid #E6394640',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
                   color: '#E63946',
                   cursor: 'pointer',
-                  fontWeight: 'bold',
-                  fontSize: '1rem'
+                  fontSize: '0.85rem',
+                  flexShrink: 0
                 }}
               >
                 ✕
