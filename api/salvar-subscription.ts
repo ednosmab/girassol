@@ -14,9 +14,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const diasAcrescimo = tipo === 'adubo' ? 15 : tipo === 'rega' ? 2 : 1;
 
-  const dataProxima = new Date(timestamp);
-  dataProxima.setDate(dataProxima.getDate() + diasAcrescimo);
-  dataProxima.setHours(8, 0, 0, 0);
+  const dataProxima = req.body.dataDisparoCustom
+    ? new Date(req.body.dataDisparoCustom)
+    : (() => {
+        const d = new Date(timestamp);
+        d.setDate(d.getDate() + diasAcrescimo);
+        d.setHours(8, 0, 0, 0);
+        return d;
+      })();
 
   const idUsuario = Buffer.from(subscription.endpoint).toString('base64').substring(0, 30);
 

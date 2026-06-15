@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Header } from './ui/components/Header';
 import { Navigation } from './ui/components/Navigation';
 import { InstallPrompt } from './ui/components/InstallPrompt';
+import { TestarPush } from './ui/components/TestarPush';
 import { DiarioView } from './ui/views/DiarioView';
 import { CuidadosView } from './ui/views/CuidadosView';
 import { OrigemView } from './ui/views/OrigemView';
@@ -64,6 +65,7 @@ export default function App() {
         {renderizarAba()}
       </main>
       <InstallPrompt />
+      <TestarPush />
       <footer style={{
         textAlign: 'center',
         padding: '40px 20px',
