@@ -9,7 +9,7 @@ export default defineConfig({
     VitePWA({
       strategies: 'generateSW',
       registerType: 'autoUpdate',
-      injectRegister: 'inline',
+      injectRegister: null,
       includeAssets: ['favicon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-192.png', 'icon-maskable-512.png'],
       workbox: {
         importScripts: ['/sw-custom.js'],

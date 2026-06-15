@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Header } from './ui/components/Header';
 import { Navigation } from './ui/components/Navigation';
 import { InstallPrompt } from './ui/components/InstallPrompt';
@@ -8,66 +8,10 @@ import { DiarioView } from './ui/views/DiarioView';
 import { CuidadosView } from './ui/views/CuidadosView';
 import { OrigemView } from './ui/views/OrigemView';
 import { CuriosidadesView } from './ui/views/CuriosidadesView';
-import { buscarHistorico } from './core/use-cases/buscar-historico';
 import { SyncProvider } from './core/contexts/SyncContext';
 
 export default function App() {
   const [abaAtiva, setAbaAtiva] = useState('diario');
-
-  useEffect(() => {
-    if (!('serviceWorker' in navigator)) return;
-
-    let swAtualController: ServiceWorker | null = null;
-
-    navigator.serviceWorker.ready.then((reg) => {
-      swAtualController = reg.active;
-    });
-
-    const enviarSkipWaiting = (worker: ServiceWorker) => {
-      worker.postMessage({ type: 'SKIP_WAITING' });
-    };
-
-    const handleVisibility = async () => {
-      if (document.visibilityState === 'hidden') {
-        try {
-          const registration = await navigator.serviceWorker.ready;
-          await registration.update();
-
-          if (registration.waiting) {
-            enviarSkipWaiting(registration.waiting);
-            return;
-          }
-
-          if (registration.installing) {
-            registration.installing.addEventListener('statechange', (e) => {
-              const target = e.target as ServiceWorker;
-              if (target.state === 'installed') {
-                enviarSkipWaiting(target);
-              }
-            });
-          }
-        } catch {
-          // silently fail
-        }
-      }
-
-      if (document.visibilityState === 'visible') {
-        await buscarHistorico();
-
-        const controllerAtual = navigator.serviceWorker.controller;
-        const mudou = controllerAtual && controllerAtual !== swAtualController;
-
-        if (mudou) {
-          window.location.reload();
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility);
-    };
-  }, []);
 
   const renderizarAba = () => {
     switch (abaAtiva) {
