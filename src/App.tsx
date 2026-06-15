@@ -13,23 +13,27 @@ export default function App() {
   const [abaAtiva, setAbaAtiva] = useState('diario');
 
   useEffect(() => {
-    document.addEventListener('visibilitychange', async () => {
+    const handleVisibility = async () => {
       if (document.visibilityState === 'visible') {
         await buscarHistorico();
 
         if ('serviceWorker' in navigator) {
           try {
             const registration = await navigator.serviceWorker.ready;
-            await registration.update();
+            const newWorker = await registration.update();
+            if (newWorker) {
+              console.log('[Girassol] Novo Service Worker ativado');
+            }
           } catch (error) {
             console.warn('Service Worker update failed:', error);
           }
         }
       }
-    });
+    };
 
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
-      document.removeEventListener('visibilitychange', () => {});
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, []);
 
