@@ -8,8 +8,9 @@ export function TestarPush() {
 
   const isDev = import.meta.env.DEV;
   const isTestMode = localStorage.getItem('girassol_test_mode') === 'true';
+  const hasParam = new URLSearchParams(window.location.search).has('test');
 
-  if (!isDev && !isTestMode) return null;
+  if (!isDev && !isTestMode && !hasParam) return null;
 
   const handleAgendarTeste = async (tipo: 'rega' | 'sol' | 'adubo') => {
     setStatus('Obtendo push subscription...');
