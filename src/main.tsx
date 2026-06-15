@@ -3,8 +3,17 @@ import ReactDOM from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 
-registerSW({
+const updateSW = registerSW({
   immediate: true,
+});
+
+let lastFocusCheck = 0;
+
+window.addEventListener('focus', () => {
+  const now = Date.now();
+  if (now - lastFocusCheck < 60_000) return;
+  lastFocusCheck = now;
+  updateSW?.();
 });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
