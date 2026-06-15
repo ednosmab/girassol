@@ -1,6 +1,7 @@
 // public/sw-custom.js
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
+    console.log('[Girassol SW] SKIP_WAITING recebido — ativando nova versão');
     self.skipWaiting();
   }
 });

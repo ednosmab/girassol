@@ -21,25 +21,45 @@ export default function App() {
 
     navigator.serviceWorker.ready.then((reg) => {
       swAtualController = reg.active;
+      console.log('[Girassol] SW ativo:', reg.active?.scriptURL || 'nenhum');
     });
 
     const handleVisibility = async () => {
       if (document.visibilityState === 'hidden') {
+        console.log('[Girassol] APP_HIDDEN');
+
         try {
           const registration = await navigator.serviceWorker.ready;
+          console.log('[Girassol] CHECKING_FOR_UPDATE');
+
           const newWorker = await registration.update();
+
+          if (newWorker) {
+            console.log('[Girassol] UPDATE_FOUND:', newWorker.scope);
+          } else {
+            console.log('[Girassol] NO_UPDATE');
+          }
+
           if (newWorker && newWorker.waiting) {
+            console.log('[Girassol] SKIP_WAITING_SENT');
             newWorker.waiting.postMessage({ type: 'SKIP_WAITING' });
           }
         } catch (error) {
-          console.warn('Service Worker update failed:', error);
+          console.warn('[Girassol] UPDATE_FAILED:', error);
         }
       }
 
       if (document.visibilityState === 'visible') {
+        console.log('[Girassol] APP_VISIBLE');
         await buscarHistorico();
 
-        if (navigator.serviceWorker.controller && navigator.serviceWorker.controller !== swAtualController) {
+        const controllerAtual = navigator.serviceWorker.controller;
+        const mudou = controllerAtual && controllerAtual !== swAtualController;
+
+        console.log('[Girassol] CONTROLLER_CHANGED:', mudou);
+
+        if (mudou) {
+          console.log('[Girassol] APP_RELOADED');
           window.location.reload();
         }
       }
