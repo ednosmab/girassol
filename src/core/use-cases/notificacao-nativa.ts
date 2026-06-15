@@ -1,4 +1,4 @@
-const VAPID_PUBLIC_KEY = 'BJ1Ntz0pfuQyL6ga7xRmuMCQayzoH5kwYkFnpr33cwTmqd3qRx2H07JH_l-gIoc5nIITFZ_nd1zmFs3gi9CohZg';
+const VAPID_PUBLIC_KEY = 'BLCM5F8Z0KLjyaXgCiDcFKl1JTr1u4tsRuliqSYqsuWIuUvHv7B6HbWj2kpytijo3nRZDUHkCJGshSucF20ND1w';
 
 export async function solicitarPermissaoEAtivarNotificacoes(): Promise<boolean> {
   if (!('Notification' in window) || !('serviceWorker' in navigator)) {
