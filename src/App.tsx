@@ -24,7 +24,7 @@ export default function App() {
             const registration = await navigator.serviceWorker.ready;
             const newWorker = await registration.update();
             if (newWorker) {
-              console.log('[Girassol] Novo Service Worker ativado');
+              console.log('[Girassol] Novo Service Worker detectado');
             }
           } catch (error) {
             console.warn('Service Worker update failed:', error);
@@ -36,6 +36,24 @@ export default function App() {
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    let isRefreshing = false;
+
+    const handleControllerChange = () => {
+      if (!isRefreshing) {
+        isRefreshing = true;
+        window.location.reload();
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+    return () => {
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
     };
   }, []);
 
