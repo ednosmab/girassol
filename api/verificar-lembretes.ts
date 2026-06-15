@@ -31,6 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
 
   let enviados = 0;
+  const erros: string[] = [];
 
   for (const chave of chaves) {
     const lembrete = await kv.get<LembreteKV>(chave);
@@ -60,12 +61,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             await kv.del(chave);
           }
         } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
           console.error(`Falha ao enviar push para ${chave}:`, error);
-          await kv.del(chave);
+          erros.push(`${chave}: ${msg}`);
         }
       }
     }
   }
 
-  return res.status(200).json({ processados: chaves.length, enviados });
+  return res.status(200).json({ processados: chaves.length, enviados, erros });
 }

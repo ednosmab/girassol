@@ -20,9 +20,9 @@ export function TestarPush() {
       return;
     }
 
-    const dataDisparoCustom = new Date(Date.now() + 60 * 1000).toISOString();
+    const dataDisparoCustom = new Date().toISOString();
 
-    setStatus('Salvando lembrete com disparo em 60s...');
+    setStatus('Salvando lembrete...');
     const response = await fetch('/api/salvar-subscription', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -56,9 +56,18 @@ export function TestarPush() {
 
     const data = await response.json();
     if (response.ok) {
-      setStatus(`Cron executado! Processados: ${data.processados}, Enviados: ${data.enviados}`);
+      if (data.enviados > 0) {
+        setStatus(`✅ Push enviado! Processados: ${data.processados}, Enviados: ${data.enviados}`);
+      } else if (data.processados > 0) {
+        setStatus(`⏰ Lembretes encontrados (${data.processados}) mas nenhum vencido. Verifique o KV.`);
+      } else {
+        setStatus(`📭 Nenhum lembrete encontrado no KV. Registre um cuidado primeiro.`);
+      }
+      if (data.erros && data.erros.length > 0) {
+        setStatus(prev => `${prev}\n⚠️ Erros: ${data.erros.join(', ')}`);
+      }
     } else {
-      setStatus(`Erro: ${data.error || response.statusText}`);
+      setStatus(`❌ Erro ${response.status}: ${data.error || response.statusText}`);
     }
   };
 
