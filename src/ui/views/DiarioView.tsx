@@ -137,7 +137,7 @@ export function DiarioView() {
         }}>
           📝 Anotações e Lembretes Importantes
         </h3>
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '15px' }}>
           <textarea
             ref={textoRef}
             value={textoLembrete}
@@ -151,17 +151,18 @@ export function DiarioView() {
             placeholder="Ex: Brotou uma folhinha nova hoje..."
             rows={1}
             style={{
-              flex: 1,
-              padding: '12px 20px',
-              borderRadius: '20px',
+              width: '100%',
+              padding: '14px 20px',
+              borderRadius: '16px',
               border: '1px solid #E0E0E0',
               fontFamily: "'Plus Jakarta Sans', sans-serif",
               fontSize: '0.95rem',
               resize: 'none',
               overflow: 'hidden',
-              minHeight: '44px',
+              minHeight: '48px',
               maxHeight: '100px',
-              lineHeight: '1.5'
+              lineHeight: '1.5',
+              boxSizing: 'border-box'
             }}
           />
           <button
@@ -170,14 +171,16 @@ export function DiarioView() {
               background: '#3C2A21',
               color: 'white',
               border: 'none',
-              padding: '0 20px',
-              borderRadius: '20px',
+              padding: '14px 24px',
+              borderRadius: '16px',
               cursor: 'pointer',
               fontWeight: 600,
-              fontFamily: "'Plus Jakarta Sans', sans-serif"
+              fontFamily: "'Plus Jakarta Sans', sans-serif",
+              fontSize: '0.95rem',
+              width: '100%'
             }}
           >
-            Salvar
+            Salvar Anotações
           </button>
         </div>
         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
