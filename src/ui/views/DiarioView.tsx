@@ -196,7 +196,12 @@ export function DiarioView() {
               fontSize: '0.95rem',
               borderLeft: '4px solid #F2B705'
             }}>
-              <span>{item.titulo}</span>
+              <span style={{
+                flex: 1,
+                minWidth: 0,
+                wordBreak: 'break-word',
+                overflowWrap: 'break-word'
+              }}>{item.titulo}</span>
               <button
                 onClick={() => removerLembrete(item.id)}
                 style={{
