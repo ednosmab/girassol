@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import type { SyncState, SyncStatus } from '../types/sync';
+import type { SyncState } from '../types/sync';
 import { outbox } from '../database/outbox-store';
 
 interface SyncContextValue {
@@ -14,19 +14,6 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     status: navigator.onLine ? 'synced' : 'offline',
     pendingEvents: 0
   });
-
-  const atualizarEstado = useCallback(async () => {
-    const pending = await outbox.contarPendentes();
-    const status: SyncStatus = navigator.onLine
-      ? (pending > 0 ? 'syncing' : 'synced')
-      : 'offline';
-
-    setSyncState(prev => ({
-      ...prev,
-      status,
-      pendingEvents: pending
-    }));
-  }, []);
 
   const triggerSync = useCallback(async () => {
     if (!navigator.onLine) {
@@ -89,6 +76,23 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       lastSyncAt: erros === 0 ? Date.now() : undefined
     });
   }, []);
+
+  const atualizarEstado = useCallback(async () => {
+    const pending = await outbox.contarPendentes();
+
+    if (!navigator.onLine) {
+      setSyncState(prev => ({ ...prev, status: 'offline', pendingEvents: pending }));
+      return;
+    }
+
+    if (pending === 0) {
+      setSyncState(prev => ({ ...prev, status: 'synced', pendingEvents: 0 }));
+      return;
+    }
+
+    setSyncState(prev => ({ ...prev, status: 'syncing', pendingEvents: pending }));
+    triggerSync();
+  }, [triggerSync]);
 
   useEffect(() => {
     atualizarEstado();

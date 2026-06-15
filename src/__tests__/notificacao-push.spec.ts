@@ -1,20 +1,34 @@
 import { calcularDiasRestantes, TitulosNotificacao, DescricoesNotificacao } from '../core/use-cases/notificacao-nativa';
 
+function formatarDataBR(data: Date): string {
+  return data.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+}
+
 describe('calcularDiasRestantes', () => {
-  it('deve calcular 2 dias para rega', () => {
+  it('deve retornar a data futura para rega (2 dias)', () => {
     const ontem = new Date();
     ontem.setDate(ontem.getDate() - 1);
-    expect(calcularDiasRestantes(ontem.toISOString(), 'rega')).toBe('1 dia(s)');
+    const esperado = new Date();
+    esperado.setDate(esperado.getDate() + 1);
+    expect(calcularDiasRestantes(ontem.toISOString(), 'rega')).toBe(formatarDataBR(esperado));
   });
 
-  it('deve calcular 15 dias para adubo', () => {
+  it('deve retornar a data futura para adubo (15 dias)', () => {
     const hoje = new Date();
-    expect(calcularDiasRestantes(hoje.toISOString(), 'adubo')).toBe('15 dia(s)');
+    const esperado = new Date();
+    esperado.setDate(esperado.getDate() + 15);
+    expect(calcularDiasRestantes(hoje.toISOString(), 'adubo')).toBe(formatarDataBR(esperado));
   });
 
-  it('deve calcular 1 dia para sol', () => {
+  it('deve retornar a data futura para sol (1 dia)', () => {
     const hoje = new Date();
-    expect(calcularDiasRestantes(hoje.toISOString(), 'sol')).toBe('1 dia(s)');
+    const esperado = new Date();
+    esperado.setDate(esperado.getDate() + 1);
+    expect(calcularDiasRestantes(hoje.toISOString(), 'sol')).toBe(formatarDataBR(esperado));
   });
 
   it('deve retornar "Vence hoje!" quando a data já passou', () => {
@@ -33,7 +47,15 @@ describe('calcularDiasRestantes', () => {
   it('deve calcular corretamente para adubo com 10 dias restantes', () => {
     const cincoDiasAtras = new Date();
     cincoDiasAtras.setDate(cincoDiasAtras.getDate() - 5);
-    expect(calcularDiasRestantes(cincoDiasAtras.toISOString(), 'adubo')).toBe('10 dia(s)');
+    const esperado = new Date();
+    esperado.setDate(esperado.getDate() + 10);
+    expect(calcularDiasRestantes(cincoDiasAtras.toISOString(), 'adubo')).toBe(formatarDataBR(esperado));
+  });
+
+  it('deve respeitar o calendário do mês (jun 30 + 2 = jul 2)', () => {
+    const jun30 = new Date(2026, 5, 30);
+    const esperado = new Date(2026, 6, 2);
+    expect(calcularDiasRestantes(jun30.toISOString(), 'rega')).toBe(formatarDataBR(esperado));
   });
 });
 

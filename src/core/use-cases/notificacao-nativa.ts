@@ -117,7 +117,12 @@ export function calcularDiasRestantes(timestamp: string, tipo: 'rega' | 'sol' | 
   const diffDias = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
   if (diffDias <= 0) return 'Vence hoje!';
-  return `${diffDias} dia(s)`;
+
+  return dataProxima.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
 }
 
 export async function obterProximoLembrete(tipo: 'rega' | 'sol' | 'adubo'): Promise<string | null> {
