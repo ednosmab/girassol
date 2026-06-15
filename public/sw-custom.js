@@ -6,6 +6,7 @@ self.addEventListener('push', (event) => {
       body: dados.body,
       icon: '/icon-192.png',
       badge: '/icon-192.png',
+      image: dados.image || '/icon-192.png',
       vibrate: [300, 100, 300],
       data: { dateOfArrival: Date.now() }
     };

@@ -45,7 +45,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             lembrete.subscription,
             JSON.stringify({
               title: '🌻 Meu Girassol',
-              body: mensagens[lembrete.tipo] || 'Seu girassol precisa de você!'
+              body: mensagens[lembrete.tipo] || 'Seu girassol precisa de você!',
+              image: '/icon-192.png'
             })
           );
 

@@ -36,7 +36,7 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
     <div style={{
       background: '#FFFFFF',
       borderRadius: '30px',
-      padding: '35px 25px',
+      padding: '35px 16px',
       boxShadow: '0 20px 40px rgba(0,0,0,0.05)',
       border: '2px dashed #F2B705'
     }}>
@@ -64,22 +64,24 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: '15px',
+        gap: '10px',
         marginBottom: '25px'
       }}>
         {tiposCuidado.map(({ tipo, label, cor }) => (
           <div key={tipo} style={{
             background: '#FFFDF9',
             borderRadius: '20px',
-            padding: '15px',
+            padding: '12px 8px',
             textAlign: 'center',
-            border: '1px solid rgba(0,0,0,0.05)'
+            border: '1px solid rgba(0,0,0,0.05)',
+            minWidth: 0
           }}>
             <span style={{
               display: 'block',
-              fontSize: '0.85rem',
+              fontSize: '0.78rem',
               fontWeight: 600,
-              color: '#7A7A7A'
+              color: '#7A7A7A',
+              whiteSpace: 'nowrap'
             }}>
               {label === 'Rega' ? 'Última Rega' : label === 'Sol' ? 'Banho de Sol' : 'Último Adubo'}
             </span>
