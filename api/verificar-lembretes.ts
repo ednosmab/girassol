@@ -15,6 +15,18 @@ interface LembreteKV {
   processado: boolean;
 }
 
+function isTransientError(statusCode?: number): boolean {
+  if (!statusCode) return true; // erro de rede, sem status, tratar como transitório
+  // 408 (timeout), 429 (rate limit), 5xx (server error) → mantém subscription
+  return statusCode === 408 || statusCode === 429 || (statusCode >= 500 && statusCode < 600);
+}
+
+function isPermanentError(statusCode?: number): boolean {
+  if (!statusCode) return false;
+  // 404 (not found) e 410 (gone) → endpoint não existe mais, usuário desinstalou
+  return statusCode === 404 || statusCode === 410;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization;
   if (process.env.NODE_ENV === 'production' && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -31,43 +43,64 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
 
   let enviados = 0;
+  let apagados = 0;
   const erros: string[] = [];
 
   for (const chave of chaves) {
     const lembrete = await kv.get<LembreteKV>(chave);
 
-    if (lembrete && !lembrete.processado) {
-      const dataDisparo = new Date(lembrete.dataDisparo);
+    if (!lembrete || lembrete.processado) continue;
 
-      if (agora >= dataDisparo) {
-        try {
-          await webpush.sendNotification(
-            lembrete.subscription,
-            JSON.stringify({
-              title: '🌻 Meu Girassol',
-              body: mensagens[lembrete.tipo] || 'Seu girassol precisa de você!'
-            })
-          );
+    const dataDisparo = new Date(lembrete.dataDisparo);
+    if (agora < dataDisparo) continue;
 
-          enviados++;
+    try {
+      await webpush.sendNotification(
+        lembrete.subscription,
+        JSON.stringify({
+          title: '🌻 Meu Girassol',
+          body: mensagens[lembrete.tipo] || 'Seu girassol precisa de você!'
+        })
+      );
 
-          if (lembrete.tipo === 'sol') {
-            const amanha = new Date();
-            amanha.setDate(amanha.getDate() + 1);
-            amanha.setHours(8, 0, 0, 0);
-            lembrete.dataDisparo = amanha.toISOString();
-            await kv.set(chave, lembrete);
-          } else {
-            await kv.del(chave);
-          }
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error);
-          console.error(`Falha ao enviar push para ${chave}:`, error);
-          erros.push(`${chave}: ${msg}`);
-        }
+      enviados++;
+
+      if (lembrete.tipo === 'sol') {
+        const amanha = new Date();
+        amanha.setDate(amanha.getDate() + 1);
+        amanha.setHours(8, 0, 0, 0);
+        lembrete.dataDisparo = amanha.toISOString();
+        await kv.set(chave, lembrete);
+      } else {
+        await kv.del(chave);
+        apagados++;
+      }
+    } catch (error) {
+      const statusCode = (error as any)?.statusCode;
+      const msg = error instanceof Error ? error.message : String(error);
+
+      if (isPermanentError(statusCode)) {
+        // 404/410: subscription morreu, usuário desinstalou
+        console.warn(`[verificar-lembretes] subscription morta (${statusCode}), removendo ${chave}`);
+        await kv.del(chave);
+        apagados++;
+        erros.push(`${chave}: subscription morta (${statusCode})`);
+      } else if (isTransientError(statusCode)) {
+        // 429/5xx/rede: manter e tentar de novo no próximo ciclo
+        console.warn(`[verificar-lembretes] erro transitório (${statusCode}) em ${chave}: ${msg}`);
+        erros.push(`${chave}: transitório (${statusCode})`);
+      } else {
+        // Status desconhecido: comportamento conservador = manter
+        console.error(`[verificar-lembretes] erro desconhecido em ${chave}:`, error);
+        erros.push(`${chave}: desconhecido`);
       }
     }
   }
 
-  return res.status(200).json({ processados: chaves.length, enviados, erros });
+  return res.status(200).json({
+    totalVerificados: chaves.length,
+    enviados,
+    apagados,
+    erros
+  });
 }
