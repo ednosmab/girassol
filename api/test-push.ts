@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { getRedis } from './_shared/redis-client';
 import webpush from 'web-push';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { SalvarSubscriptionInputSchema, parseOrReject } from './_shared/validation';
@@ -33,6 +33,7 @@ const mensagens: Record<string, string> = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const redis = getRedis();
   const auth = authorize(req);
   if (!auth.authorized) {
     return res.status(401).json({ error: auth.reason });
@@ -54,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { tipo, subscription, dataDisparoCustom } = parsed.data;
     const idUsuario = Buffer.from(subscription.endpoint).toString('base64').substring(0, 30);
-    await kv.set(`lembrete:${idUsuario}:${tipo}`, {
+    await redis.set(`lembrete:${idUsuario}:${tipo}`, {
       tipo,
       subscription,
       dataDisparo: dataDisparoCustom,
@@ -65,14 +66,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // --- Action: disparar ---
   if (action === 'disparar') {
-    const chaves = await kv.keys('lembrete:*');
+    const chaves = await redis.keys('lembrete:*');
     const agora = new Date();
     let enviados = 0;
     let apagados = 0;
     const erros: string[] = [];
 
     for (const chave of chaves) {
-      const lembrete: any = await kv.get(chave);
+      const lembrete: any = await redis.get(chave);
       if (!lembrete || lembrete.processado) continue;
       const dataDisparo = new Date(lembrete.dataDisparo);
       if (agora < dataDisparo) continue;
@@ -91,9 +92,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           amanha.setDate(amanha.getDate() + 1);
           amanha.setHours(8, 0, 0, 0);
           lembrete.dataDisparo = amanha.toISOString();
-          await kv.set(chave, lembrete);
+          await redis.set(chave, lembrete);
         } else {
-          await kv.del(chave);
+          await redis.del(chave);
           apagados++;
         }
       } catch (error) {
@@ -106,10 +107,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // --- Action: listar ---
   if (action === 'listar') {
-    const chaves = await kv.keys('lembrete:*');
+    const chaves = await redis.keys('lembrete:*');
     const itens: any[] = [];
     for (const chave of chaves) {
-      const lembrete: any = await kv.get(chave);
+      const lembrete: any = await redis.get(chave);
       if (lembrete) {
         itens.push({
           chave,

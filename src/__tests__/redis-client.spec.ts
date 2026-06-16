@@ -1,6 +1,15 @@
 import { jest } from '@jest/globals';
 import { getRedis, _setRedisForTests, RedisLike } from '../../api/_shared/redis-client';
 
+function createMock(): RedisLike {
+  return {
+    get: jest.fn() as any,
+    set: jest.fn() as any,
+    del: jest.fn() as any,
+    keys: jest.fn() as any
+  };
+}
+
 beforeEach(() => {
   _setRedisForTests(null);
 });
@@ -11,24 +20,14 @@ describe('getRedis', () => {
   });
 
   it('deve aceitar client injetado via _setRedisForTests', () => {
-    const mock: RedisLike = {
-      get: jest.fn(),
-      set: jest.fn(),
-      del: jest.fn(),
-      keys: jest.fn()
-    };
+    const mock = createMock();
     _setRedisForTests(mock);
     const r = getRedis();
     expect(r).toBe(mock);
   });
 
   it('deve cachear instância entre chamadas', () => {
-    const mock: RedisLike = {
-      get: jest.fn(),
-      set: jest.fn(),
-      del: jest.fn(),
-      keys: jest.fn()
-    };
+    const mock = createMock();
     _setRedisForTests(mock);
     const r1 = getRedis();
     const r2 = getRedis();
@@ -36,18 +35,8 @@ describe('getRedis', () => {
   });
 
   it('deve permitir resetar cache', () => {
-    const mock1: RedisLike = {
-      get: jest.fn(),
-      set: jest.fn(),
-      del: jest.fn(),
-      keys: jest.fn()
-    };
-    const mock2: RedisLike = {
-      get: jest.fn(),
-      set: jest.fn(),
-      del: jest.fn(),
-      keys: jest.fn()
-    };
+    const mock1 = createMock();
+    const mock2 = createMock();
     _setRedisForTests(mock1);
     const r1 = getRedis();
     _setRedisForTests(mock2);

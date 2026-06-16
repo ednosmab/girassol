@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { getRedis } from './_shared/redis-client';
 import webpush from 'web-push';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
@@ -28,12 +28,13 @@ function isPermanentError(statusCode?: number): boolean {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const redis = getRedis();
   const authHeader = req.headers.authorization;
   if (process.env.NODE_ENV === 'production' && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(401).json({ error: 'Não autorizado' });
   }
 
-  const chaves = await kv.keys('lembrete:*');
+  const chaves = await redis.keys('lembrete:*');
   const agora = new Date();
 
   const mensagens: Record<string, string> = {
@@ -47,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const erros: string[] = [];
 
   for (const chave of chaves) {
-    const lembrete = await kv.get<LembreteKV>(chave);
+    const lembrete = await redis.get<LembreteKV>(chave);
 
     if (!lembrete || lembrete.processado) continue;
 
@@ -70,9 +71,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         amanha.setDate(amanha.getDate() + 1);
         amanha.setHours(8, 0, 0, 0);
         lembrete.dataDisparo = amanha.toISOString();
-        await kv.set(chave, lembrete);
+        await redis.set(chave, lembrete);
       } else {
-        await kv.del(chave);
+        await redis.del(chave);
         apagados++;
       }
     } catch (error) {
@@ -82,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (isPermanentError(statusCode)) {
         // 404/410: subscription morreu, usuário desinstalou
         console.warn(`[verificar-lembretes] subscription morta (${statusCode}), removendo ${chave}`);
-        await kv.del(chave);
+        await redis.del(chave);
         apagados++;
         erros.push(`${chave}: subscription morta (${statusCode})`);
       } else if (isTransientError(statusCode)) {

@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { getRedis } from './_shared/redis-client';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { SyncEventsInputSchema, parseOrReject } from './_shared/validation';
 import { checkRateLimit } from './_shared/rate-limit';
@@ -10,6 +10,7 @@ function getClientKey(req: VercelRequest): string {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const redis = getRedis();
   const limit = checkRateLimit(getClientKey(req));
   res.setHeader('X-RateLimit-Remaining', String(limit.remaining));
   res.setHeader('X-RateLimit-Reset', String(Math.floor(limit.resetAt / 1000)));
@@ -30,17 +31,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const resultados: { id: string; status: string }[] = [];
 
   for (const event of events) {
-    const alreadyProcessed = await kv.get(`processed:${event.idempotencyKey}`);
+    const alreadyProcessed = await redis.get(`processed:${event.idempotencyKey}`);
     if (alreadyProcessed) {
       resultados.push({ id: event.id, status: 'already_processed' });
       continue;
     }
 
     try {
-      await kv.set(`processed:${event.idempotencyKey}`, true, { ex: 86400 * 30 });
+      await redis.set(`processed:${event.idempotencyKey}`, true, { ex: 86400 * 30 });
 
       const key = `event:${event.id}`;
-      await kv.set(key, {
+      await redis.set(key, {
         ...event,
         processedAt: new Date().toISOString()
       });

@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { getRedis } from './_shared/redis-client';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { SalvarSubscriptionInputSchema, parseOrReject } from './_shared/validation';
 import { checkRateLimit } from './_shared/rate-limit';
@@ -10,6 +10,7 @@ function getClientKey(req: VercelRequest): string {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const redis = getRedis();
   // Rate limit (sempre, independente de método)
   const limit = checkRateLimit(getClientKey(req));
   res.setHeader('X-RateLimit-Remaining', String(limit.remaining));
@@ -48,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     processado: false
   };
 
-  await kv.set(`lembrete:${idUsuario}:${tipo}`, dadosLembrete);
+  await redis.set(`lembrete:${idUsuario}:${tipo}`, dadosLembrete);
 
   return res.status(200).json({ success: true, agendadoPara: dataProxima });
 }
