@@ -57,7 +57,7 @@ export function TestarPush() {
 
   const handleDispararCron = async () => {
     if (!isDev && !testToken) {
-      setStatus('Em produção, cole o X-Test-Token (= CRON_SECRET) primeiro.');
+      setStatus('Em produção, cole o X-Test-Token primeiro.');
       return;
     }
 
@@ -167,7 +167,7 @@ export function TestarPush() {
           {!isDev && (
             <input
               type="password"
-              placeholder="X-Test-Token (= CRON_SECRET)"
+              placeholder="X-Test-Token"
               value={testToken}
               onChange={(e) => setTestToken(e.target.value)}
               style={{

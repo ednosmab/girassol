@@ -35,21 +35,20 @@ function getRedis() {
       return exec(...args);
     },
     del: (key: string) => exec('DEL', key),
+    incr: (key: string) => exec<number>('INCR', key),
+    expire: (key: string, seconds: number) => exec<number>('EXPIRE', key, seconds),
   };
 }
 
-const buckets = new Map<string, { count: number; resetAt: number }>();
-function checkRateLimit(key: string) {
-  const now = Date.now();
-  const bucket = buckets.get(key);
-  if (!bucket || bucket.resetAt < now) {
-    const fresh = { count: 1, resetAt: now + 60_000 };
-    buckets.set(key, fresh);
-    return { allowed: true, remaining: 9, resetAt: fresh.resetAt };
-  }
-  if (bucket.count >= 10) return { allowed: false, remaining: 0, resetAt: bucket.resetAt };
-  bucket.count++;
-  return { allowed: true, remaining: 10 - bucket.count, resetAt: bucket.resetAt };
+async function rateLimit(redis: ReturnType<typeof getRedis>, key: string, limit = 10, windowSec = 60) {
+  const current = await redis.incr(`ratelimit:${key}`);
+  if (current === 1) await redis.expire(`ratelimit:${key}`, windowSec);
+  return { allowed: current <= limit, remaining: Math.max(0, limit - current) };
+}
+
+function getClientIp(req: ApiRequest): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  return Array.isArray(forwarded) ? forwarded[0] : (forwarded?.split(',')[0] ?? 'unknown');
 }
 
 const PushSubscriptionSchema = z.object({
@@ -77,36 +76,45 @@ const SalvarSubscriptionInputSchema = z.object({
 );
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
-  const redis = getRedis();
-  const forwarded = req.headers['x-forwarded-for'];
-  const ip = Array.isArray(forwarded) ? forwarded[0] : (forwarded?.split(',')[0] ?? 'unknown');
-  const limit = checkRateLimit(`salvar:${ip}`);
-  res.setHeader('X-RateLimit-Remaining', String(limit.remaining));
-  res.setHeader('X-RateLimit-Reset', String(Math.floor(limit.resetAt / 1000)));
-  if (!limit.allowed) return res.status(429).json({ error: 'Muitas requisições. Tente novamente em breve.' });
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
+  try {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
 
-  const parsed = SalvarSubscriptionInputSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos', details: parsed.error });
-  const { tipo, subscription, timestamp, dataDisparoCustom } = parsed.data;
+    const apiKey = req.headers['x-api-key'];
+    if (apiKey !== process.env.VITE_SYNC_API_KEY) {
+      return res.status(401).json({ error: 'Não autorizado' });
+    }
 
-  const diasAcrescimo = tipo === 'adubo' ? 15 : tipo === 'rega' ? 2 : 1;
-  const dataProxima = dataDisparoCustom
-    ? new Date(dataDisparoCustom)
-    : (() => {
-        const d = new Date(timestamp);
-        d.setDate(d.getDate() + diasAcrescimo);
-        d.setHours(8, 0, 0, 0);
-        return d;
-      })();
+    const redis = getRedis();
 
-  const idUsuario = Buffer.from(subscription.endpoint).toString('base64').substring(0, 30);
-  await redis.set(`lembrete:${idUsuario}:${tipo}`, {
-    tipo,
-    subscription,
-    dataDisparo: dataProxima.toISOString(),
-    processado: false
-  });
+    const limit = await rateLimit(redis, `salvar:${getClientIp(req)}`);
+    res.setHeader('X-RateLimit-Remaining', String(limit.remaining));
+    if (!limit.allowed) return res.status(429).json({ error: 'Muitas requisições. Tente novamente em breve.' });
 
-  return res.status(200).json({ success: true, agendadoPara: dataProxima });
+    const parsed = SalvarSubscriptionInputSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos' });
+    const { tipo, subscription, timestamp, dataDisparoCustom } = parsed.data;
+
+    const diasAcrescimo = tipo === 'adubo' ? 15 : tipo === 'rega' ? 2 : 1;
+    const dataProxima = dataDisparoCustom
+      ? new Date(dataDisparoCustom)
+      : (() => {
+          const d = new Date(timestamp);
+          d.setDate(d.getDate() + diasAcrescimo);
+          d.setHours(8, 0, 0, 0);
+          return d;
+        })();
+
+    const idUsuario = Buffer.from(subscription.endpoint).toString('base64').substring(0, 30);
+    await redis.set(`lembrete:${idUsuario}:${tipo}`, {
+      tipo,
+      subscription,
+      dataDisparo: dataProxima.toISOString(),
+      processado: false
+    });
+
+    return res.status(200).json({ success: true, agendadoPara: dataProxima });
+  } catch (error) {
+    console.error('salvar-subscription error:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ error: 'Erro interno no servidor.' });
+  }
 }

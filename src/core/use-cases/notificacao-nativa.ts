@@ -102,7 +102,10 @@ export async function agendarLembrete(
   try {
     const response = await fetch('/api/salvar-subscription', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': (import.meta as any).env?.VITE_SYNC_API_KEY ?? ''
+      },
       body: JSON.stringify({ tipo, subscription: subscription.toJSON(), timestamp })
     });
 
