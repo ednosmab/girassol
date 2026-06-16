@@ -67,17 +67,6 @@
       "destination": "/index.html"
     }
   ],
-  "functions": {
-    "api/sync-events.ts": {
-      "includeFiles": ["api/shared/**"]
-    },
-    "api/salvar-subscription.ts": {
-      "includeFiles": ["api/shared/**"]
-    },
-    "api/verificar-lembretes.ts": {
-      "includeFiles": ["api/shared/**"]
-    }
-  },
   "crons": [
     {
       "path": "/api/verificar-lembretes",

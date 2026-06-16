@@ -1,6 +1,3 @@
-// Redis REST client using native fetch — no external dependencies needed.
-// Compatible with Upstash Redis REST API.
-
 export interface RedisLike {
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, opts?: { ex?: number }): Promise<unknown>;

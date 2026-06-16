@@ -5,7 +5,7 @@ interface RateLimitBucket {
 
 const buckets = new Map<string, RateLimitBucket>();
 
-const WINDOW_MS = 60_000; // 1 minuto
+const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 10;
 
 export function checkRateLimit(key: string): { allowed: boolean; remaining: number; resetAt: number } {
@@ -26,7 +26,6 @@ export function checkRateLimit(key: string): { allowed: boolean; remaining: numb
   return { allowed: true, remaining: MAX_REQUESTS - bucket.count, resetAt: bucket.resetAt };
 }
 
-// Helper de cleanup — chamar antes/depois de cada request pra evitar leak
 export function pruneExpiredBuckets(): number {
   const now = Date.now();
   let pruned = 0;

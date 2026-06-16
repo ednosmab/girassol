@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-// Subscription push — formato W3C
 const PushSubscriptionSchema = z.object({
   endpoint: z.string().url().max(2048),
   expirationTime: z.number().nullable().optional(),
@@ -10,7 +9,6 @@ const PushSubscriptionSchema = z.object({
   })
 });
 
-// salvar-subscription
 export const SalvarSubscriptionInputSchema = z.object({
   tipo: z.enum(['rega', 'sol', 'adubo']),
   subscription: PushSubscriptionSchema,
@@ -29,7 +27,6 @@ export const SalvarSubscriptionInputSchema = z.object({
 
 export type SalvarSubscriptionInput = z.infer<typeof SalvarSubscriptionInputSchema>;
 
-// sync-events
 const SyncEventSchema = z.object({
   id: z.string().min(1).max(128),
   type: z.enum(['care_registered', 'care_deleted', 'reminder_created', 'reminder_deleted']),
@@ -44,7 +41,6 @@ export const SyncEventsInputSchema = z.object({
 export type SyncEvent = z.infer<typeof SyncEventSchema>;
 export type SyncEventsInput = z.infer<typeof SyncEventsInputSchema>;
 
-// Helper: rejeita input com 400 + erro estruturado
 export function parseOrReject<T>(
   schema: z.ZodType<T>,
   data: unknown

@@ -1,6 +1,42 @@
-import { getRedis } from './shared/redis-client';
 import webpush from 'web-push';
-import type { VercelRequest, VercelResponse } from './shared/types';
+import type { IncomingMessage, ServerResponse } from 'http';
+
+interface VercelRequest extends IncomingMessage {
+  query: Record<string, string | string[]>;
+  cookies: Record<string, string>;
+  body: any;
+}
+interface VercelResponse extends ServerResponse {
+  status(code: number): VercelResponse;
+  json(data: any): VercelResponse;
+}
+
+function getRedis() {
+  const url = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
+  if (!url || !token) throw new Error('Redis não configurado');
+  async function exec<T = unknown>(...args: (string | number)[]): Promise<T> {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(args),
+    });
+    if (!res.ok) throw new Error(`Redis error ${res.status}`);
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+    return json.result as T;
+  }
+  return {
+    get: <T = unknown>(key: string) => exec<T | null>('GET', key),
+    set: (key: string, value: unknown, opts?: { ex?: number }) => {
+      const args: (string | number)[] = ['SET', key, typeof value === 'string' ? value : JSON.stringify(value)];
+      if (opts?.ex) args.push('EX', opts.ex);
+      return exec(...args);
+    },
+    del: (key: string) => exec('DEL', key),
+    keys: (pattern: string) => exec<string[]>('KEYS', pattern),
+  };
+}
 
 webpush.setVapidDetails(
   'mailto:contato@girassol.app',
@@ -16,14 +52,12 @@ interface LembreteKV {
 }
 
 function isTransientError(statusCode?: number): boolean {
-  if (!statusCode) return true; // erro de rede, sem status, tratar como transitório
-  // 408 (timeout), 429 (rate limit), 5xx (server error) → mantém subscription
+  if (!statusCode) return true;
   return statusCode === 408 || statusCode === 429 || (statusCode >= 500 && statusCode < 600);
 }
 
 function isPermanentError(statusCode?: number): boolean {
   if (!statusCode) return false;
-  // 404 (not found) e 410 (gone) → endpoint não existe mais, usuário desinstalou
   return statusCode === 404 || statusCode === 410;
 }
 
@@ -49,7 +83,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   for (const chave of chaves) {
     const lembrete = await redis.get<LembreteKV>(chave);
-
     if (!lembrete || lembrete.processado) continue;
 
     const dataDisparo = new Date(lembrete.dataDisparo);
@@ -63,7 +96,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           body: mensagens[lembrete.tipo] || 'Seu girassol precisa de você!'
         })
       );
-
       enviados++;
 
       if (lembrete.tipo === 'sol') {
@@ -81,17 +113,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const msg = error instanceof Error ? error.message : String(error);
 
       if (isPermanentError(statusCode)) {
-        // 404/410: subscription morreu, usuário desinstalou
         console.warn(`[verificar-lembretes] subscription morta (${statusCode}), removendo ${chave}`);
         await redis.del(chave);
         apagados++;
         erros.push(`${chave}: subscription morta (${statusCode})`);
       } else if (isTransientError(statusCode)) {
-        // 429/5xx/rede: manter e tentar de novo no próximo ciclo
         console.warn(`[verificar-lembretes] erro transitório (${statusCode}) em ${chave}: ${msg}`);
         erros.push(`${chave}: transitório (${statusCode})`);
       } else {
-        // Status desconhecido: comportamento conservador = manter
         console.error(`[verificar-lembretes] erro desconhecido em ${chave}:`, error);
         erros.push(`${chave}: desconhecido`);
       }
