@@ -3,14 +3,28 @@ import { obterPushSubscription } from '../../core/use-cases/notificacao-nativa';
 
 export function TestarPush() {
   const [status, setStatus] = useState('');
-  const [cronToken, setCronToken] = useState('');
+  const [testToken, setTestToken] = useState('');
   const [mostrarPainel, setMostrarPainel] = useState(false);
 
   const isDev = import.meta.env.DEV;
-  const isTestMode = localStorage.getItem('girassol_test_mode') === 'true';
-  const hasParam = new URLSearchParams(window.location.search).has('test');
+  const isTestMode = typeof localStorage !== 'undefined' && localStorage.getItem('girassol_test_mode') === 'true';
+  const hasParam = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('test');
 
   if (!isDev && !isTestMode && !hasParam) return null;
+
+  const callTestPush = async (body: Record<string, unknown>) => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    // Em produção, envia o token de teste. Em dev, não precisa.
+    if (!isDev && testToken) {
+      headers['X-Test-Token'] = testToken;
+    }
+    const response = await fetch('/api/test-push', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    });
+    return response;
+  };
 
   const handleAgendarTeste = async (tipo: 'rega' | 'sol' | 'adubo') => {
     setStatus('Obtendo push subscription...');
@@ -20,79 +34,82 @@ export function TestarPush() {
       return;
     }
 
-    const dataDisparoCustom = new Date().toISOString();
+    const dataDisparoCustom = new Date(Date.now() + 30_000).toISOString(); // 30s no futuro
 
     setStatus('Salvando lembrete...');
-    const response = await fetch('/api/salvar-subscription', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tipo,
-        subscription: subscription.toJSON(),
-        timestamp: new Date().toISOString(),
-        dataDisparoCustom
-      })
+    const response = await callTestPush({
+      action: 'agendar',
+      tipo,
+      subscription: subscription.toJSON(),
+      timestamp: new Date().toISOString(),
+      dataDisparoCustom
     });
 
     if (!response.ok) {
-      setStatus('Erro ao salvar no servidor');
+      const err = await response.json().catch(() => ({}));
+      setStatus(`Erro ${response.status}: ${err.error ?? response.statusText}`);
       return;
     }
 
     const data = await response.json();
-    setStatus(`Lembrete agendado para ${new Date(data.agendadoPara).toLocaleString('pt-BR')} — dispare o cron quando quiser!`);
+    setStatus(`Agendado para ${new Date(data.agendadoPara).toLocaleString('pt-BR')}. Use o botão Disparar em ~30s.`);
   };
 
   const handleDispararCron = async () => {
-    if (!cronToken) {
-      setStatus('Cole o CRON_SECRET primeiro');
+    if (!isDev && !testToken) {
+      setStatus('Em produção, cole o X-Test-Token (= CRON_SECRET) primeiro.');
       return;
     }
 
-    setStatus('Disparando cron...');
-    const response = await fetch('/api/verificar-lembretes', {
-      headers: { Authorization: `Bearer ${cronToken}` }
-    });
-
+    setStatus('Disparando...');
+    const response = await callTestPush({ action: 'disparar' });
     const data = await response.json();
-    if (response.ok) {
-      if (data.enviados > 0) {
-        setStatus(`✅ Push enviado! Processados: ${data.processados}, Enviados: ${data.enviados}`);
-      } else if (data.processados > 0) {
-        setStatus(`⏰ Lembretes encontrados (${data.processados}) mas nenhum vencido. Verifique o KV.`);
-      } else {
-        setStatus(`📭 Nenhum lembrete encontrado no KV. Registre um cuidado primeiro.`);
-      }
-      if (data.erros && data.erros.length > 0) {
-        setStatus(prev => `${prev}\n⚠️ Erros: ${data.erros.join(', ')}`);
-      }
+
+    if (!response.ok) {
+      setStatus(`Erro ${response.status}: ${data.error ?? response.statusText}`);
+      return;
+    }
+
+    if (data.enviados > 0) {
+      setStatus(`✅ Enviados: ${data.enviados} | Apagados: ${data.apagados} | Total: ${data.totalVerificados}`);
+    } else if (data.totalVerificados > 0) {
+      setStatus(`⏰ ${data.totalVerificados} lembretes encontrados, nenhum vencido ainda.`);
     } else {
-      setStatus(`❌ Erro ${response.status}: ${data.error || response.statusText}`);
+      setStatus('📭 Nenhum lembrete no KV. Agende um primeiro.');
+    }
+    if (data.erros?.length > 0) {
+      setStatus((prev) => `${prev}\n⚠️ ${data.erros.join(', ')}`);
+    }
+  };
+
+  const handleListar = async () => {
+    setStatus('Listando...');
+    const response = await callTestPush({ action: 'listar' });
+    const data = await response.json();
+    if (!response.ok) {
+      setStatus(`Erro ${response.status}: ${data.error ?? response.statusText}`);
+      return;
+    }
+    if (data.total === 0) {
+      setStatus('📭 Nenhum lembrete no KV.');
+    } else {
+      const linhas = data.itens.map((i: any) =>
+        `  ${i.tipo} → ${new Date(i.dataDisparo).toLocaleString('pt-BR')}${i.processado ? ' ✓' : ''}`
+      );
+      setStatus(`📋 ${data.total} lembretes:\n${linhas.join('\n')}`);
     }
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      bottom: '80px',
-      right: '16px',
-      zIndex: 9999
-    }}>
+    <div style={{ position: 'fixed', bottom: '80px', right: '16px', zIndex: 9999 }}>
       <button
         onClick={() => setMostrarPainel(!mostrarPainel)}
         style={{
-          width: '48px',
-          height: '48px',
-          borderRadius: '50%',
-          background: '#E63946',
-          color: 'white',
-          border: 'none',
-          fontSize: '1.2rem',
-          cursor: 'pointer',
+          width: '48px', height: '48px', borderRadius: '50%',
+          background: '#E63946', color: 'white', border: 'none',
+          fontSize: '1.2rem', cursor: 'pointer',
           boxShadow: '0 4px 12px rgba(230,57,70,0.4)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}
         aria-label="Testar Push"
       >
@@ -101,14 +118,9 @@ export function TestarPush() {
 
       {mostrarPainel && (
         <div style={{
-          position: 'absolute',
-          bottom: '60px',
-          right: 0,
-          width: '300px',
-          background: '#1a1a2e',
-          color: '#eee',
-          borderRadius: '16px',
-          padding: '16px',
+          position: 'absolute', bottom: '60px', right: 0,
+          width: '320px', background: '#1a1a2e', color: '#eee',
+          borderRadius: '16px', padding: '16px',
           boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
         }}>
           <h3 style={{ margin: '0 0 12px 0', fontSize: '0.95rem', color: '#F2B705' }}>
@@ -121,15 +133,9 @@ export function TestarPush() {
                 key={tipo}
                 onClick={() => handleAgendarTeste(tipo)}
                 style={{
-                  flex: 1,
-                  padding: '8px 4px',
-                  borderRadius: '8px',
-                  border: 'none',
+                  flex: 1, padding: '8px 4px', borderRadius: '8px', border: 'none',
                   background: tipo === 'rega' ? '#3A86FF' : tipo === 'sol' ? '#D98E04' : '#40513B',
-                  color: 'white',
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  cursor: 'pointer'
+                  color: 'white', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer'
                 }}
               >
                 {tipo === 'rega' ? '💧' : tipo === 'sol' ? '☀️' : '🌱'}
@@ -137,51 +143,49 @@ export function TestarPush() {
             ))}
           </div>
 
-          <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
-            <input
-              type="password"
-              placeholder="CRON_SECRET"
-              value={cronToken}
-              onChange={(e) => setCronToken(e.target.value)}
-              style={{
-                flex: 1,
-                padding: '8px',
-                borderRadius: '8px',
-                border: '1px solid #333',
-                background: '#0f0f23',
-                color: '#eee',
-                fontSize: '0.8rem'
-              }}
-            />
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
             <button
               onClick={handleDispararCron}
               style={{
-                padding: '8px 12px',
-                borderRadius: '8px',
-                border: 'none',
-                background: '#E63946',
-                color: 'white',
-                fontWeight: 700,
-                fontSize: '0.75rem',
-                cursor: 'pointer'
+                flex: 1, padding: '8px', borderRadius: '8px', border: 'none',
+                background: '#E63946', color: 'white', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer'
               }}
             >
               Disparar
             </button>
+            <button
+              onClick={handleListar}
+              style={{
+                flex: 1, padding: '8px', borderRadius: '8px', border: 'none',
+                background: '#3A86FF', color: 'white', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer'
+              }}
+            >
+              Listar
+            </button>
           </div>
 
+          {!isDev && (
+            <input
+              type="password"
+              placeholder="X-Test-Token (= CRON_SECRET)"
+              value={testToken}
+              onChange={(e) => setTestToken(e.target.value)}
+              style={{
+                width: '100%', padding: '8px', borderRadius: '8px',
+                border: '1px solid #333', background: '#0f0f23', color: '#eee',
+                fontSize: '0.8rem', marginBottom: '8px', boxSizing: 'border-box'
+              }}
+            />
+          )}
+
           {status && (
-            <p style={{
-              margin: 0,
-              fontSize: '0.75rem',
-              color: '#aaa',
-              background: '#0f0f23',
-              padding: '8px',
-              borderRadius: '8px',
-              wordBreak: 'break-word'
+            <pre style={{
+              margin: 0, fontSize: '0.7rem', color: '#aaa',
+              background: '#0f0f23', padding: '8px', borderRadius: '8px',
+              wordBreak: 'break-word', whiteSpace: 'pre-wrap', maxHeight: '200px', overflow: 'auto'
             }}>
               {status}
-            </p>
+            </pre>
           )}
         </div>
       )}
