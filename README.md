@@ -94,7 +94,7 @@ Cron Jobs → Push Notifications
 │   │   └── views/
 │   │       ├── DiarioView.tsx
 │   │       └── CuidadosView.tsx
-│   ├── __tests__/                  # 9 suítes / 63 testes
+│   ├── __tests__/                  # 15 suítes / 110 testes
 │   ├── App.tsx
 │   └── main.tsx
 ├── public/
@@ -110,7 +110,7 @@ Cron Jobs → Push Notifications
 
 ## 🧪 Testes
 
-### Cobertura
+### Cobertura (atualizado pós-Planos 01–04)
 
 | Suíte | Testes | O que valida |
 |---|---|---|
@@ -123,7 +123,13 @@ Cron Jobs → Push Notifications
 | `gerenciar-lembretes.spec.ts` | 4 | Schema Zod de lembretes |
 | `agendar-notificacao.spec.ts` | 3 | Google Calendar URL |
 | `build.spec.ts` | 12 | Arquivos de build existentes |
-| **Total** | **63** | |
+| `sw-custom.spec.ts` | 5 | Handlers do service worker custom |
+| `useServiceWorkerUpdate.spec.ts` | 7 | Hook de update do SW |
+| `validation.spec.ts` | 14 | Schemas Zod compartilhados |
+| `rate-limit.spec.ts` | 7 | Rate limit in-memory |
+| `test-push-endpoint.spec.ts` | 4 | Endpoint /api/test-push |
+| `redis-client.spec.ts` | 6 | Factory de Redis injetável |
+| **Total** | **110** | |
 
 ### Executar
 
@@ -138,10 +144,8 @@ npm run test:coverage # Com cobertura
 |---|---|---|
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Client | Chave pública VAPID |
 | `VAPID_PRIVATE_KEY` | Server | Chave privada VAPID |
-| `KV_URL` | Server | URL do Upstash Redis |
-| `KV_REST_API_URL` | Server | Endpoint REST do KV |
-| `KV_REST_API_TOKEN` | Server | Token de escrita |
-| `KV_REST_API_READ_ONLY_TOKEN` | Server | Token de leitura |
+| `UPSTASH_REDIS_REST_URL` | Server | URL do Upstash Redis (via Marketplace) |
+| `UPSTASH_REDIS_REST_TOKEN` | Server | Token REST do Upstash |
 | `CRON_SECRET` | Server | Secret para Vercel Cron |
 
 ## 📋 Comandos
@@ -170,6 +174,15 @@ npm run lint          # Verificar tipos TypeScript
 - **Produção**: branch `main` → Vercel
 - **Staging**: branch `staging` → Vercel Preview
 - **Cron**: `0 11 * * *` (8h BRT) via vercel.json
+
+## 🛡️ Planos de hardening aplicados
+
+- **Plano 01:** Service Worker com update seguro (visibilitychange + ativação em background)
+- **Plano 02:** Validação Zod em todas as API functions + rate limit
+- **Plano 03:** Endpoint `/api/test-push` autenticado server-side (CRON_SECRET sai do browser)
+- **Plano 04:** Migração de `@vercel/kv` (deprecated) para `@upstash/redis`
+
+Detalhes em `docs/plans/`.
 
 ## 📄 Licença
 
