@@ -897,6 +897,16 @@ if (online && eventosPendentes > 0) {
 
 ---
 
+### 7.7 Endpoints de teste vs produção
+
+| Endpoint | Quem chama | Auth |
+|---|---|---|
+| `POST /api/salvar-subscription` | Cliente da usuária (em produção) | nenhuma (rate limit) |
+| `GET /api/verificar-lembretes` | Vercel Cron | `Authorization: Bearer CRON_SECRET` |
+| `POST /api/test-push` | `TestarPush.tsx` (admin) | `X-Test-Token: CRON_SECRET` em produção |
+
+---
+
 ## Apêndice A: Comandos Úteis
 
 ```bash
