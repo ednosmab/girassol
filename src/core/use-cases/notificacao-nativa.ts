@@ -37,19 +37,30 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 export async function obterPushSubscription(): Promise<PushSubscription | null> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    console.warn('Push: Service Worker ou PushManager não suportado neste navegador.');
     return null;
   }
 
   const permission = await Notification.requestPermission();
-  if (permission !== 'granted') return null;
+  if (permission !== 'granted') {
+    console.warn('Push: Permissão de notificação não concedida (status:', permission, ')');
+    return null;
+  }
 
   const registration = await navigator.serviceWorker.ready;
   let subscription = await registration.pushManager.getSubscription();
 
   if (!subscription) {
+    let vapidKey: string;
+    try {
+      vapidKey = getVapidPublicKey();
+    } catch (e) {
+      console.warn('Push:', (e as Error).message);
+      return null;
+    }
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(getVapidPublicKey()) as BufferSource
+      applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource
     });
   }
 
