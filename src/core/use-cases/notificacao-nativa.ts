@@ -1,6 +1,14 @@
 import { db } from '../database/localforage-db';
 
-const VAPID_PUBLIC_KEY = 'BLCM5F8Z0KLjyaXgCiDcFKl1JTr1u4tsRuliqSYqsuWIuUvHv7B6HbWj2kpytijo3nRZDUHkCJGshSucF20ND1w';
+function getVapidPublicKey(): string {
+  const key = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY as string | undefined;
+  if (!key) {
+    throw new Error(
+      'VITE_VAPID_PUBLIC_KEY não definida. Configure no .env (dev) e na Vercel (prod).'
+    );
+  }
+  return key;
+}
 
 export async function solicitarPermissaoEAtivarNotificacoes(): Promise<boolean> {
   if (!('Notification' in window) || !('serviceWorker' in navigator)) {
@@ -41,7 +49,7 @@ export async function obterPushSubscription(): Promise<PushSubscription | null> 
   if (!subscription) {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource
+      applicationServerKey: urlBase64ToUint8Array(getVapidPublicKey()) as BufferSource
     });
   }
 
