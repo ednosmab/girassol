@@ -1,6 +1,6 @@
 import { getRedis } from './_shared/redis-client';
 import webpush from 'web-push';
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { VercelRequest, VercelResponse } from './_shared/types';
 import { SalvarSubscriptionInputSchema, parseOrReject } from './_shared/validation';
 
 webpush.setVapidDetails(
