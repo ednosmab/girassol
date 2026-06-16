@@ -1,14 +1,15 @@
 import webpush from 'web-push';
-import type { IncomingMessage, ServerResponse } from 'http';
 
-interface VercelRequest extends IncomingMessage {
-  query: Record<string, string | string[]>;
-  cookies: Record<string, string>;
+interface ApiRequest {
+  method?: string;
+  headers: Record<string, string | string[] | undefined>;
   body: any;
 }
-interface VercelResponse extends ServerResponse {
-  status(code: number): VercelResponse;
-  json(data: any): VercelResponse;
+
+interface ApiResponse {
+  status(code: number): ApiResponse;
+  json(data: any): ApiResponse;
+  setHeader(name: string, value: string): void;
 }
 
 function getRedis() {
@@ -61,7 +62,7 @@ function isPermanentError(statusCode?: number): boolean {
   return statusCode === 404 || statusCode === 410;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   const redis = getRedis();
   const authHeader = req.headers.authorization;
   if (process.env.NODE_ENV === 'production' && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {

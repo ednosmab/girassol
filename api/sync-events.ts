@@ -1,14 +1,15 @@
 import { z } from 'zod';
-import type { IncomingMessage, ServerResponse } from 'http';
 
-interface VercelRequest extends IncomingMessage {
-  query: Record<string, string | string[]>;
-  cookies: Record<string, string>;
+interface ApiRequest {
+  method?: string;
+  headers: Record<string, string | string[] | undefined>;
   body: any;
 }
-interface VercelResponse extends ServerResponse {
-  status(code: number): VercelResponse;
-  json(data: any): VercelResponse;
+
+interface ApiResponse {
+  status(code: number): ApiResponse;
+  json(data: any): ApiResponse;
+  setHeader(name: string, value: string): void;
 }
 
 function getRedis() {
@@ -60,7 +61,7 @@ const SyncEventsInputSchema = z.object({
   events: z.array(SyncEventSchema).min(1).max(100)
 });
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
     const redis = getRedis();
     const forwarded = req.headers['x-forwarded-for'];
