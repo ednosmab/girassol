@@ -219,9 +219,9 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
                   lineHeight: 1.6,
                   marginBottom: '16px'
                 }}>
-                  <strong>Chrome/Edge:</strong> clique no cadeado 🔒 ao lado da URL → Notificações → Permitir<br/>
+                  <strong>Chrome/Edge:</strong> clique no ícone de configurações ⚙️ (ou "טין" 🔧) à esquerda da URL → Notificações → Permitir<br/>
                   <strong>Safari:</strong> Configurações → Sites → Notificações → Permitir<br/>
-                  <strong>Firefox:</strong> clique no cadeado 🔒 → Permissões → Notificar → Permitir
+                  <strong>Firefox:</strong> clique no ícone de permissões à esquerda da URL → Permissões → Notificar → Permitir
                 </div>
                 <button
                   onClick={() => setMostrarDialogoPermissao(false)}
