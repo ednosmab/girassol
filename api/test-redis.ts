@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { getRedis } from './_shared/redis-client';
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
+export default function handler(_req: VercelRequest, res: VercelResponse) {
   try {
-    const { getRedis } = require('./_shared/redis-client');
     const redis = getRedis();
     return res.status(200).json({ ok: true, redis: 'connected' });
   } catch (error: any) {
