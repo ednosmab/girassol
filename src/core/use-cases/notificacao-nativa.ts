@@ -1,5 +1,16 @@
 import { db } from '../database/localforage-db';
 
+export type PermissaoStatus = 'supported' | 'not-supported' | 'denied' | 'default';
+
+export function verificarSuporteNotificacoes(): PermissaoStatus {
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+    return 'not-supported';
+  }
+  if (Notification.permission === 'denied') return 'denied';
+  if (Notification.permission === 'granted') return 'supported';
+  return 'default';
+}
+
 function getVapidPublicKey(): string {
   const key = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY as string | undefined;
   if (!key) {
@@ -13,6 +24,11 @@ function getVapidPublicKey(): string {
 export async function solicitarPermissaoEAtivarNotificacoes(): Promise<boolean> {
   if (!('Notification' in window) || !('serviceWorker' in navigator)) {
     console.warn('Este dispositivo não suporta notificações nativas.');
+    return false;
+  }
+
+  if (Notification.permission === 'denied') {
+    console.warn('Permissão de notificações negada pelo usuário. Reative em Configurações do navegador.');
     return false;
   }
 
@@ -38,6 +54,11 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 export async function obterPushSubscription(): Promise<PushSubscription | null> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     console.warn('Push: Service Worker ou PushManager não suportado neste navegador.');
+    return null;
+  }
+
+  if (Notification.permission === 'denied') {
+    console.warn('Push: Permissão de notificação negada. Reative em Configurações do navegador > Notificações.');
     return null;
   }
 
