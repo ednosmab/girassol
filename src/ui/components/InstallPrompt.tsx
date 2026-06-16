@@ -59,7 +59,7 @@ export function InstallPrompt() {
           color: '#F2B705',
           margin: 0
         }}>
-          Instalar Jardim Secreto
+          Instalar
         </p>
         <p style={{
           fontFamily: "'Plus Jakarta Sans', sans-serif",

@@ -17,7 +17,6 @@ export function Header() {
         margin: 0,
         lineHeight: 1
       }}>
-        Jardim Secreto
       </h1>
       <p style={{
         margin: '10px 0 0 0',
