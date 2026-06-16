@@ -2,7 +2,7 @@ import {
   SalvarSubscriptionInputSchema,
   SyncEventsInputSchema,
   parseOrReject
-} from '../../api/_shared/validation';
+} from '../../api/shared/validation';
 
 describe('SalvarSubscriptionInputSchema', () => {
   const validInput = {

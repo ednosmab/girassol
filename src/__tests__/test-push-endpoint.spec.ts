@@ -1,4 +1,4 @@
-import { SalvarSubscriptionInputSchema } from '../../api/_shared/validation';
+import { SalvarSubscriptionInputSchema } from '../../api/shared/validation';
 
 describe('/api/test-push — contratos internos', () => {
   it('SalvarSubscriptionInputSchema aceita dataDisparoCustom agora', () => {

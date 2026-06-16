@@ -1,6 +1,6 @@
-import { getRedis } from './_shared/redis-client';
+import { getRedis } from './shared/redis-client';
 import webpush from 'web-push';
-import type { VercelRequest, VercelResponse } from './_shared/types';
+import type { VercelRequest, VercelResponse } from './shared/types';
 
 webpush.setVapidDetails(
   'mailto:contato@girassol.app',

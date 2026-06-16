@@ -1,7 +1,7 @@
-import { getRedis } from './_shared/redis-client';
-import type { VercelRequest, VercelResponse } from './_shared/types';
-import { SyncEventsInputSchema, parseOrReject } from './_shared/validation';
-import { checkRateLimit } from './_shared/rate-limit';
+import { getRedis } from './shared/redis-client';
+import type { VercelRequest, VercelResponse } from './shared/types';
+import { SyncEventsInputSchema, parseOrReject } from './shared/validation';
+import { checkRateLimit } from './shared/rate-limit';
 
 function getClientKey(req: VercelRequest): string {
   const forwarded = req.headers['x-forwarded-for'];

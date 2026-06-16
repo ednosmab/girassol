@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { getRedis, _setRedisForTests, RedisLike } from '../../api/_shared/redis-client';
+import { getRedis, _setRedisForTests, RedisLike } from '../../api/shared/redis-client';
 
 function createMock(): RedisLike {
   return {

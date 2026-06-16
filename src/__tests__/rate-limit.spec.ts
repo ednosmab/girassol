@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { checkRateLimit, pruneExpiredBuckets, _resetRateLimitForTests } from '../../api/_shared/rate-limit';
+import { checkRateLimit, pruneExpiredBuckets, _resetRateLimitForTests } from '../../api/shared/rate-limit';
 
 beforeEach(() => {
   _resetRateLimitForTests();
