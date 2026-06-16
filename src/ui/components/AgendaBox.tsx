@@ -16,6 +16,7 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
   const [proximos, setProximos] = useState<Record<string, string | null>>({});
   const [permissaoStatus, setPermissaoStatus] = useState(verificarSuporteNotificacoes());
   const [mostrarDialogoPermissao, setMostrarDialogoPermissao] = useState(false);
+  const [tipoPendente, setTipoPendente] = useState<'rega' | 'sol' | 'adubo' | null>(null);
 
   const carregarCountdowns = async () => {
     setProximos({
@@ -38,11 +39,13 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
     setPermissaoStatus(status);
 
     if (status === 'denied') {
+      setTipoPendente(tipo);
       setMostrarDialogoPermissao(true);
       return;
     }
 
     if (status === 'default') {
+      setTipoPendente(tipo);
       setMostrarDialogoPermissao(true);
       return;
     }
@@ -67,6 +70,21 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
       setPermissaoStatus('supported');
     } else {
       setPermissaoStatus(verificarSuporteNotificacoes());
+    }
+  };
+
+  const handleTentarNovamente = () => {
+    const novoStatus = verificarSuporteNotificacoes();
+    setPermissaoStatus(novoStatus);
+
+    if (novoStatus === 'supported') {
+      setMostrarDialogoPermissao(false);
+      if (tipoPendente) {
+        void agendarLembrete(tipoPendente).catch((error) => {
+          console.error('Falha ao agendar lembrete:', error);
+        });
+        setTipoPendente(null);
+      }
     }
   };
 
@@ -219,10 +237,26 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
                   lineHeight: 1.6,
                   marginBottom: '16px'
                 }}>
-                  <strong>Chrome/Edge:</strong> ao lado da barra de endereço, clique no ícone 🔧 ou ℹ️ → clique em "Permissões do site" → encontre "Notificações" → mude para <strong>Permitir</strong><br/>
-                  <strong>Safari:</strong> Configurações → Sites → Notificações → Permitir<br/>
-                  <strong>Firefox:</strong> clique no ícone à esquerda da URL → Permissões → Notificar → Permitir
+                  1. Clique no ícone 🔒 à esquerda do endereço do site<br/>
+                  2. Ative o toggle de <strong>Notificações</strong><br/>
+                  3. Clique em <strong>"Tentar novamente"</strong> abaixo
                 </div>
+                <button
+                  onClick={handleTentarNovamente}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: '#40513B',
+                    color: 'white',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Tentar novamente
+                </button>
                 <button
                   onClick={() => setMostrarDialogoPermissao(false)}
                   style={{
