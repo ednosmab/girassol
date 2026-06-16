@@ -1,5 +1,14 @@
 // public/sw-custom.js
 
+// --- Atualização controlada por mensagem ---
+// O client envia { type: 'SKIP_WAITING' } quando quer ativar este SW.
+// Isso é seguro porque só ativamos em background (ver useServiceWorkerUpdate.ts).
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener('push', (event) => {
   if (event.data) {
     const dados = event.data.json();
