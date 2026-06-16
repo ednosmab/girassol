@@ -237,7 +237,7 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
                   lineHeight: 1.6,
                   marginBottom: '16px'
                 }}>
-                  1. Clique no ícone ⚙️ à esquerda do endereço do site<br/>
+                  1. Clique no ícone <img src="/tune-icon.png" alt="Configurações do Site" style={{ width: '18px', height: '18px', borderRadius: '4px', verticalAlign: 'middle', margin: '0 2px' }} /> ao lado da barra de endereço<br/>
                   2. Ative o toggle de <strong>Notificações</strong><br/>
                   3. Clique em <strong>"Tentar novamente"</strong> abaixo
                 </div>
