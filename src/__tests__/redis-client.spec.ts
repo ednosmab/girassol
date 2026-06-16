@@ -44,24 +44,4 @@ describe('getRedis', () => {
     expect(r1).toBe(mock1);
     expect(r2).toBe(mock2);
   });
-
-  it('deve preferir UPSTASH_* sobre KV_* quando ambos definidos', () => {
-    const env = {
-      UPSTASH_REDIS_REST_URL: 'https://upstash.example.com',
-      UPSTASH_REDIS_REST_TOKEN: 'upstash-token',
-      KV_REST_API_URL: 'https://kv.example.com',
-      KV_REST_API_TOKEN: 'kv-token'
-    } as NodeJS.ProcessEnv;
-
-    expect(() => getRedis(env)).not.toThrow();
-  });
-
-  it('deve aceitar fallback KV_REST_API_URL/TOKEN', () => {
-    const env = {
-      KV_REST_API_URL: 'https://kv.example.com',
-      KV_REST_API_TOKEN: 'kvtoken'
-    } as NodeJS.ProcessEnv;
-
-    expect(() => getRedis(env)).not.toThrow();
-  });
 });
