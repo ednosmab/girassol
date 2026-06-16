@@ -21,7 +21,6 @@
 13. [Fluxos Críticos](#13-fluxos-críticos)
 14. [Decisões de Design](#14-decisões-de-design)
 15. [Problemas Encontrados e Soluções](#15-problemas-encontrados-e-soluções)
-
 ---
 
 ## 1. Visão Geral
@@ -120,6 +119,7 @@ src/
 ├── core/                    # Lógica de negócio
 │   ├── contexts/            # React Contexts (estado global)
 │   ├── database/            # Acesso a dados (IndexedDB, Outbox)
+│   ├── hooks/               # Hooks React (useServiceWorkerUpdate)
 │   ├── types/               # Tipos TypeScript
 │   └── use-cases/           # Funções de lógica de negócio
 ├── ui/                      # Apresentação
@@ -177,23 +177,23 @@ const LembretesDB = localforage.createInstance({
 **Cuidados Store:**
 ```typescript
 interface Cuidado {
-  id: string;              // UUID
+  id?: string;
   tipo: 'rega' | 'sol' | 'adubo';
-  timestamp: number;       // Epoch ms
+  timestamp: string;       // ISO timestamp
   dataFormatada: string;   // DD/MM/YYYY
-  criadoEm: string;        // ISO timestamp
+  criadoEm: number;        // Date.now()
 }
 ```
 
 **Lembretes Store:**
 ```typescript
 interface Lembrete {
-  id: string;
+  id?: string;
   titulo: string;
   mensagem: string;
   dataAgendada: string;    // ISO timestamp
-  ativo: boolean;
-  criadoEm: string;
+  ativo: boolean;          // soft-delete
+  criadoEm: number;        // Date.now() — exibido na UI
 }
 ```
 
@@ -285,6 +285,9 @@ const triggerSync = async () => {
 
 ```typescript
 // Server-side (sync-events.ts)
+import { getRedis } from './_shared/redis-client';
+
+const kv = getRedis();
 const jaProcessado = await kv.get(`processed:${idempotencyKey}`);
 if (jaProcessado) {
   return { status: 'duplicate' };
@@ -313,67 +316,67 @@ Eventos com status `synced` são removidos automaticamente. Eventos `failed` ap�
 - Quando precisa de controle total sobre o SW
 - Para apps com lógica complexa no SW (ex: background sync)
 
-### 6.2 Registro: autoUpdate
+### 6.2 Configuração Atual: prompt
 
 ```typescript
-registerType: 'autoUpdate'
+// vite.config.ts
+registerType: 'prompt'        // SW não toma controle automático
+clientsClaim: false            // SW NÃO assume controle imediatamente
+skipWaiting: false             // SW NÃO pula estado "waiting"
 ```
 
-**Comportamento:** O SW verifica atualizações a cada carregamento de página. Se houver nova versão, ativa automaticamente (quando o app estiver em background).
+**Comportamento:** O SW é registrado mas NÃO ativa automaticamente. A ativação ocorre apenas quando o hook `useServiceWorkerUpdate` envia a mensagem `SKIP_WAITING` (em background).
 
-### 6.3 Atualização Silenciosa — O Problema
+### 6.3 Mecanismo de Atualização — Hook useServiceWorkerUpdate
 
-**Problema:** Se o SW ativar enquanto o usuário está usando o app, `clientsClaim()` forçaria reload, perdendo estado (texto em textarea, etc.).
-
-**Solução: Ciclo de Atualização em Background**
+A atualização é controlada por um hook React dedicado (`src/core/hooks/useServiceWorkerUpdate.ts`):
 
 ```typescript
-// App.tsx
-const handleVisibility = async () => {
-  if (document.visibilityState === 'hidden') {
-    // App foi para background — seguro para atualizar
-    const registration = await navigator.serviceWorker.ready;
-    await registration.update();
+// useServiceWorkerUpdate.ts
+const INITIAL_CHECK_DELAY_MS = 3_000;      // 3 segundos após montar
+const PERIODIC_CHECK_INTERVAL_MS = 30 * 60 * 1000;  // 30 minutos
+const VISIBLE_THROTTLE_MS = 60_000;        // throttle de 60s no visible
 
-    if (registration.waiting) {
-      // SW já está esperando — ativar imediatamente
-      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-    }
+// Fluxo:
+// 1. checkForUpdate() → reg.update() → detecta novo sw.js
+// 2. Se reg.waiting → status: 'available'
+// 3. Em background (hidden) → envia SKIP_WAITING
+// 4. controllerchange → window.location.reload()
+```
 
-    if (registration.installing) {
-      // SW está instalando — aguardar estado 'installed'
-      registration.installing.addEventListener('statechange', (e) => {
-        if ((e.target as ServiceWorker).state === 'installed') {
-          (e.target as ServiceWorker).postMessage({ type: 'SKIP_WAITING' });
-        }
-      });
-    }
-  }
+**Ciclo completo:**
 
-  if (document.visibilityState === 'visible') {
-    // App voltou — verificar se SW mudou
-    const controllerAtual = navigator.serviceWorker.controller;
-    if (controllerAtual && controllerAtual !== swAtualController) {
-      window.location.reload(); // Reload seguro — app estava em background
-    }
-  }
-};
+```
+App carrega → registerSW({ immediate: true })
+    ↓
+App monta → useServiceWorkerUpdate()
+    ↓
+3s → checkForUpdate() → reg.update()
+    ↓
+A cada 30min → re-verifica
+    ↓
+visibilitychange (hidden) → SKIP_WAITING → SW ativa
+    ↓
+controllerchange → reload (uma única vez)
 ```
 
 ### 6.4 Workbox Config
 
 ```typescript
 workbox: {
-  clientsClaim: true,            // SW assume controle imediatamente
+  clientsClaim: false,           // SW NÃO assume controle imediatamente
+  skipWaiting: false,            // SW espera mensagem para ativar
   cleanupOutdatedCaches: true,   // Remove caches antigos
-  importScripts: ['/sw-custom.js'], // Push notifications
-  // NÃO usar skipWaiting: true — controle manual via mensagem
+  importScripts: ['/sw-custom.js'], // Push notifications + SKIP_WAITING listener
 }
 ```
 
-**Decisão: Não usar `skipWaiting: true`**
+**Decisão: `prompt` com `clientsClaim: false` e `skipWaiting: false`**
 
-Se `skipWaiting` estivesse habilitado, o SW ativaria imediatamente ao terminar de instalar, possivelmente recarregando o app durante uso. O controle manual via mensagem `SKIP_WAITING` permite ativar apenas quando o app está em background.
+- O SW antigo (com `autoUpdate` + `clientsClaim: true`) já estava no dispositivo do usuário
+- A mudança para `prompt` garante que novas atualizações sejam silenciosas e não interrompam o usuário
+- A detecção de versão é por comparação byte a byte do `sw.js` (precache manifest com hashes MD5)
+- Compatível com SW antigo: o browser detecta o novo `sw.js` e instala normalmente
 
 ### 6.5 Cache Headers (Vercel)
 
@@ -413,16 +416,16 @@ Se `skipWaiting` estivesse habilitado, o SW ativaria imediatamente ao terminar d
 
 ### 7.2 VAPID Keys
 
-- **Public key**: Hardcoded no cliente (`NEXT_PUBLIC_VAPID_PUBLIC_KEY`)
-- **Private key**: Armazenada apenas no servidor (variável de ambiente)
-- **Servidor**: Upstash Redis (via Vercel KV)
+- **Public key**: via `getVapidPublicKey()` — lê de `import.meta.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY` (deferred check, sem throw no load do módulo)
+- **Private key**: Armazenada apenas no servidor (variável de ambiente `VAPID_PRIVATE_KEY`)
+- **Servidor**: Upstash Redis (via `@upstash/redis`)
 
 ### 7.3 Fluxo de Notificação
 
 1. **Cliente**: Registra subscription push via `registration.pushManager.subscribe()`
 2. **Cliente**: Envia subscription para `/api/salvar-subscription`
 3. **Servidor**: Calcula próxima data de disparo baseada no tipo de cuidado
-4. **Servidor**: Armazena no KV como `lembrete:{userId}:{tipo}`
+4. **Servidor**: Armazena no Upstash Redis como `lembrete:{userId}:{tipo}`
 5. **Cron (08:00 BRT)**: Verifica lembretes pendentes e envia push
 6. **Cliente**: SW recebe push e exibe notificação nativa
 
@@ -538,31 +541,78 @@ maskable.paste(content_resized, (offset_x, offset_y), content_resized)
 
 ### 9.1 Endpoints
 
-| Método | Path | Descrição |
-|--------|------|-----------|
-| `POST` | `/api/salvar-subscription` | Salva subscription push no KV |
-| `POST` | `/api/sync-events` | Recebe eventos da outbox do cliente |
-| `GET` | `/api/verificar-lembretes` | Cron: envia notificações pendentes |
+| Método | Path | Descrição | Validação |
+|--------|------|-----------|-----------|
+| `POST` | `/api/salvar-subscription` | Salva subscription push no Upstash Redis | Zod + rate limit |
+| `POST` | `/api/sync-events` | Recebe eventos da outbox do cliente | Zod + rate limit + max 100 |
+| `GET` | `/api/verificar-lembretes` | Cron: envia notificações pendentes | Bearer token |
+| `POST` | `/api/test-push` | Admin: testa push notification | `X-Test-Token: CRON_SECRET` |
 
-### 9.2 Estrutura de uma Function
+### 9.2 Redis Client: @upstash/redis
+
+**Decisão:** Migrar de `@vercel/kv` para `@upstash/redis` (Vercel deprecou `@vercel/kv`, recomendou migração).
+
+```typescript
+// api/_shared/redis-client.ts
+import { Redis } from '@upstash/redis';
+
+let redisInstance: Redis | null = null;
+
+export function getRedis(): Redis {
+  if (!redisInstance) {
+    redisInstance = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    });
+  }
+  return redisInstance;
+}
+
+// Para testes: injetável sem ESM mocking
+export function _setRedisForTests(redis: Redis | null): void {
+  redisInstance = redis;
+}
+```
+
+**Justificativa:**
+- Factory injetável permite testes sem complexidade de ESM mocking
+- `@upstash/redis` é o SDK oficial do Upstash (Vercel recomenda via Marketplace)
+- Conexão lazy (criada sob demanda, não no import do módulo)
+
+### 9.3 Estrutura de uma Function
 
 ```typescript
 // api/salvar-subscription.ts
-import { kv } from '@vercel/kv';
-import { NextRequest, NextResponse } from 'next/server';
+import { getRedis } from './_shared/redis-client';
+import { z } from 'zod';
+import { rateLimit } from './_shared/rate-limit';
+
+const BodySchema = z.object({
+  endpoint: z.string().url(),
+  keys: z.object({
+    p256dh: z.string(),
+    auth: z.string()
+  })
+});
 
 export default async function handler(req: NextRequest) {
   if (req.method !== 'POST') {
     return NextResponse.json({ error: 'Method not allowed' }, { status: 405 });
   }
 
-  const body = await req.json();
+  const rate = rateLimit(req);
+  if (!rate.ok) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
+  const body = BodySchema.parse(await req.json());
+  const kv = getRedis();
   // ... lógica de negócio
   return NextResponse.json({ success: true });
 }
 ```
 
-### 9.3 Armazenamento no KV
+### 9.4 Armazenamento no Upstash Redis
 
 | Key Pattern | Valor | TTL |
 |-------------|-------|-----|
@@ -572,11 +622,13 @@ export default async function handler(req: NextRequest) {
 
 **User ID:** Base64 do endpoint push (seudo-anônimo, sem login).
 
-### 9.4 Segurança
+### 9.5 Segurança
 
-- **CRON_SECRET**: Autentica o cron job (apenas em produção)
+- **CRON_SECRET**: Autentica o cron job e endpoint de teste (apenas em produção)
 - **VAPID_PRIVATE_KEY**: Nunca exposta ao cliente
-- **KV tokens**: Variáveis de ambiente, não no código
+- **Rate Limit**: 10 req/min por IP (in-memory, por endpoint)
+- **Zod**: Validação de todos os inputs
+- **Classificação de erros**: 404/410 = permanente (remove subscription), 429/5xx = transiente (mantém)
 
 ---
 
@@ -646,8 +698,14 @@ export default {
 | `gerenciar-lembretes.spec.ts` | 4 | Validação Zod para lembretes |
 | `agendar-notificacao.spec.ts` | 3 | Geração de URL do Google Calendar |
 | `build.spec.ts` | 5 | Existência de artefatos de build |
+| `useServiceWorkerUpdate.spec.ts` | 11 | Hook de atualização SW |
+| `redis-client.spec.ts` | 6 | Redis factory injetável |
+| `validation.spec.ts` | 10 | Schemas Zod para APIs |
+| `rate-limit.spec.ts` | 6 | Rate limiting por IP |
+| `test-push-endpoint.spec.ts` | 9 | Endpoint de teste push |
+| `sw-custom.spec.ts` | 8 | SW custom (push, notificationclick, SKIP_WAITING) |
 
-**Total: 9 suítes, 67 testes**
+**Total: 15 suítes, 108 testes**
 
 ### 11.3 Comandos
 
@@ -689,11 +747,9 @@ npm run build    # tsc && vite build → dist/
 |----------|--------|-----------|
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Cliente + Servidor | Chave pública VAPID |
 | `VAPID_PRIVATE_KEY` | Servidor | Chave privada VAPID |
-| `KV_URL` | Servidor | URL de conexão Upstash Redis |
-| `KV_REST_API_URL` | Servidor | Endpoint REST Upstash |
-| `KV_REST_API_TOKEN` | Servidor | Token de leitura/escrita |
-| `KV_REST_API_READ_ONLY_TOKEN` | Servidor | Token somente leitura |
-| `CRON_SECRET` | Servidor | Segredo para autenticação do cron |
+| `UPSTASH_REDIS_REST_URL` | Servidor | URL Upstash Redis |
+| `UPSTASH_REDIS_REST_TOKEN` | Servidor | Token Upstash Redis |
+| `CRON_SECRET` | Servidor | Segredo para autenticação do cron e test-push |
 
 ### 12.4 Cron Job
 
@@ -721,7 +777,7 @@ npm run build    # tsc && vite build → dist/
    a. Obtém subscription push
    b. Calcula próxima data (hoje + 2 dias)
    c. Envia para /api/salvar-subscription
-   d. Servidor salva no KV
+   d. Servidor salva no Upstash Redis
 4. UI atualiza: countdown, último cuidado
 5. SyncContext detecta evento pendente → sync automático
 ```
@@ -747,28 +803,44 @@ npm run build    # tsc && vite build → dist/
 ### 13.3 Fluxo: Atualização do Service Worker
 
 ```
-1. App fica em background (visibilitychange → hidden)
-2. registration.update() verifica nova versão
-3. Se houver SW pendente:
-   a. Envia SKIP_WAITING imediatamente (se já installed)
-   b. Ou aguarda estado 'installed' (se ainda installing)
-4. SW ativa em background
-5. App volta ao foreground (visibilitychange → visible)
-6. Compara controller atual com referência salva
-7. Se diferente → reload silencioso (app estava em background)
+1. App carrega → registerSW({ immediate: true })
+   (registra SW mas NÃO força atualização)
+
+2. App monta → useServiceWorkerUpdate()
+   (hook assume o ciclo de verificação)
+
+3. Após 3 segundos → checkForUpdate() → reg.update()
+   (Workbox verifica byte a byte se há novo sw.js)
+
+4. Se houver novo SW → entra em estado "waiting"
+   (não ativa automaticamente)
+
+5. A cada 30 minutos → re-verificação periódica
+
+6. Usuário muda de aba (visibilitychange → hidden):
+   → envia SKIP_WAITING ao SW waiting
+   → SW ativa
+
+7. controllerchange dispara → window.location.reload()
+   (reload UMA única vez, guarded por refreshingRef)
+
+8. App recarrega com o SW novo
 ```
 
 ### 13.4 Fluxo: Push Notification
 
 ```
 1. Cron (08:00 BRT) executa /api/verificar-lembretes
-2. Servidor scanneia chaves lembrete:* no KV
-3. Para cada lembrete com dataDisparo <= agora:
+2. Auth: Authorization: Bearer CRON_SECRET
+3. Servidor scanneia chaves lembrete:* no Upstash Redis
+4. Para cada lembrete com dataDisparo <= agora:
    a. Envia push via web-push library
    b. Se "sol" (diário): reagenda para próximo dia
    c. Se "rega"/"adubo": remove chave (one-shot)
-4. SW recebe push → exibe notificação nativa
-5. Usuário clica na notificação → app abre/foca
+   d. Erro 404/410: remove subscription (permanente)
+   e. Erro 429/5xx: mantém (retry no próximo cron)
+5. SW recebe push → exibe notificação nativa
+6. Usuário clica na notificação → app abre/foca
 ```
 
 ---
@@ -793,9 +865,11 @@ npm run build    # tsc && vite build → dist/
 
 ```typescript
 // DiarioView.tsx
-const ajustarAltura = (textarea: HTMLTextAreaElement) => {
-  textarea.style.height = 'auto';
-  textarea.style.height = `${Math.min(textarea.scrollHeight, 100)}px`;
+const autoResize = () => {
+  const el = textoRef.current;
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
 };
 ```
 
@@ -833,18 +907,21 @@ if (tiposSemRegistro.length > 0) {
 
 **Problema:** `registration.update()` retornava antes do SW atingir estado `installed`. Verificar `registration.installing` imediatamente resultava em `null`.
 
-**Solução:** Verificar `registration.waiting` primeiro (se já está pendente), caso contrário adicionar listener `statechange` no `registration.installing`:
+**Solução:** O hook `useServiceWorkerUpdate` usa `checkInFlightRef` para evitar chamadas simultâneas, e verifica `reg.waiting` após `reg.update()`:
 
 ```typescript
-if (registration.waiting) {
-  enviarSkipWaiting(registration.waiting);
-} else if (registration.installing) {
-  registration.installing.addEventListener('statechange', (e) => {
-    if ((e.target as ServiceWorker).state === 'installed') {
-      enviarSkipWaiting(e.target as ServiceWorker);
-    }
-  });
-}
+// useServiceWorkerUpdate.ts
+const checkForUpdate = useCallback(async () => {
+  if (checkInFlightRef.current) return;  // previne concorrência
+  checkInFlightRef.current = true;
+
+  const reg = await navigator.serviceWorker.ready;
+  await reg.update();
+  if (reg.waiting) {
+    setState({ status: 'available' });
+  }
+  checkInFlightRef.current = false;
+}, []);
 ```
 
 ### 15.2 Tipo ServiceWorkerState
@@ -895,9 +972,7 @@ if (online && eventosPendentes > 0) {
 }
 ```
 
----
-
-### 7.7 Endpoints de teste vs produção
+### 9.6 Endpoints de teste vs produção
 
 | Endpoint | Quem chama | Auth |
 |---|---|---|
@@ -934,7 +1009,7 @@ git push origin main:staging  # Deploy para staging
 - `react-dom` ^18.2.0
 - `localforage` ^1.10.0
 - `zod` ^3.22.4
-- `@vercel/kv` ^3.0.0
+- `@upstash/redis` ^1.38.0
 - `web-push` ^3.6.7
 
 ### Desenvolvimento
@@ -948,4 +1023,4 @@ git push origin main:staging  # Deploy para staging
 
 ---
 
-*Documento gerado em 15/06/2026 — Projeto Meu Girassol v1.0.0*
+*Documento gerado em 16/06/2026 — Projeto Meu Girassol v1.0.0*
