@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useServiceWorkerUpdate } from './core/hooks/useServiceWorkerUpdate';
 import { Header } from './ui/components/Header';
 import { Navigation } from './ui/components/Navigation';
 import { InstallPrompt } from './ui/components/InstallPrompt';
@@ -11,6 +12,8 @@ import { CuriosidadesView } from './ui/views/CuriosidadesView';
 import { SyncProvider } from './core/contexts/SyncContext';
 
 export default function App() {
+  useServiceWorkerUpdate();
+
   const [abaAtiva, setAbaAtiva] = useState('diario');
 
   const renderizarAba = () => {
