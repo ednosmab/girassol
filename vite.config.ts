@@ -8,13 +8,14 @@ export default defineConfig({
     react(),
     VitePWA({
       strategies: 'generateSW',
-      registerType: 'autoUpdate',
-      injectRegister: null,
+      registerType: 'prompt',
+      injectRegister: 'auto',
       includeAssets: ['favicon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-192.png', 'icon-maskable-512.png'],
       workbox: {
         importScripts: ['/sw-custom.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        clientsClaim: true,
+        clientsClaim: false,
+        skipWaiting: false,
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {

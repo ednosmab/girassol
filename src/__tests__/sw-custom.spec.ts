@@ -24,3 +24,21 @@ describe('sw-custom.js — handlers críticos', () => {
     expect(source).toMatch(/addEventListener\(\s*['"]notificationclick['"]/);
   });
 });
+
+describe('workbox build output — comportamento seguro', () => {
+  const distSwPath = path.join(__dirname, '../../dist/sw.js');
+  const distExists = fs.existsSync(distSwPath);
+
+  (distExists ? it : it.skip)('sw.js gerado não deve auto-skipWaiting solto', () => {
+    const buildSw = fs.readFileSync(distSwPath, 'utf-8');
+    const matches = buildSw.match(/skipWaiting\s*\(\s*\)/g) || [];
+    // O Workbox pode emitir seu próprio skipWaiting() em até 1 local
+    // (handler de message do sw-custom). Não deve haver mais que isso.
+    expect(matches.length).toBeLessThanOrEqual(1);
+  });
+
+  (distExists ? it : it.skip)('sw.js não deve chamar clientsClaim() no top-level', () => {
+    const buildSw = fs.readFileSync(distSwPath, 'utf-8');
+    expect(buildSw).not.toMatch(/^clientsClaim\s*\(\s*\)/m);
+  });
+});
