@@ -1,32 +1,35 @@
 import { kv } from '@vercel/kv';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { SyncEventsInputSchema, parseOrReject } from './_shared/validation';
+import { checkRateLimit } from './_shared/rate-limit';
 
-interface SyncEvent {
-  id: string;
-  type: string;
-  payload: Record<string, unknown>;
-  idempotencyKey: string;
+function getClientKey(req: VercelRequest): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  const ip = Array.isArray(forwarded) ? forwarded[0] : (forwarded?.split(',')[0] ?? 'unknown');
+  return `sync:${ip}`;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const limit = checkRateLimit(getClientKey(req));
+  res.setHeader('X-RateLimit-Remaining', String(limit.remaining));
+  res.setHeader('X-RateLimit-Reset', String(Math.floor(limit.resetAt / 1000)));
+  if (!limit.allowed) {
+    return res.status(429).json({ error: 'Muitas requisições. Tente novamente em breve.' });
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const { events } = req.body as { events: SyncEvent[] };
-
-  if (!events || !Array.isArray(events) || events.length === 0) {
-    return res.status(400).json({ error: 'Events array required' });
+  const parsed = parseOrReject(SyncEventsInputSchema, req.body);
+  if (!parsed.ok) {
+    return res.status(400).json(parsed.response);
   }
+  const { events } = parsed.data;
 
   const resultados: { id: string; status: string }[] = [];
 
   for (const event of events) {
-    if (!event.id || !event.type || !event.idempotencyKey) {
-      resultados.push({ id: event.id || 'unknown', status: 'error' });
-      continue;
-    }
-
     const alreadyProcessed = await kv.get(`processed:${event.idempotencyKey}`);
     if (alreadyProcessed) {
       resultados.push({ id: event.id, status: 'already_processed' });
