@@ -7,7 +7,7 @@ import { db, gerarIdUnico } from '../../core/database/localforage-db';
 
 export function DiarioView() {
   const [textoLembrete, setTextoLembrete] = useState('');
-  const [lembretes, setLembretes] = useState<{ id: string; titulo: string }[]>([]);
+  const [lembretes, setLembretes] = useState<{ id: string; titulo: string; criadoEm: number }[]>([]);
   const [proximos, setProximos] = useState<Record<string, string | null>>({});
   const [modalAberto, setModalAberto] = useState(false);
 
@@ -21,10 +21,10 @@ export function DiarioView() {
   };
 
   const carregarLembretes = async () => {
-    const items: { id: string; titulo: string }[] = [];
-    await db.lembretes.iterate<{ id?: string; titulo: string; ativo: boolean }, void>((value) => {
+    const items: { id: string; titulo: string; criadoEm: number }[] = [];
+    await db.lembretes.iterate<{ id?: string; titulo: string; ativo: boolean; criadoEm: number }, void>((value) => {
       if (value.ativo) {
-        items.push({ id: value.id!, titulo: value.titulo });
+        items.push({ id: value.id!, titulo: value.titulo, criadoEm: value.criadoEm });
       }
     });
     setLembretes(items);
@@ -196,12 +196,24 @@ export function DiarioView() {
               fontSize: '0.95rem',
               borderLeft: '4px solid #F2B705'
             }}>
-              <span style={{
+              <div style={{
                 flex: 1,
-                minWidth: 0,
-                wordBreak: 'break-word',
-                overflowWrap: 'break-word'
-              }}>{item.titulo}</span>
+                minWidth: 0
+              }}>
+                <span style={{
+                  display: 'block',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'break-word'
+                }}>{item.titulo}</span>
+                <span style={{
+                  fontSize: '0.7rem',
+                  color: '#999',
+                  marginTop: '2px',
+                  display: 'block'
+                }}>
+                  {new Date(item.criadoEm).toLocaleDateString('pt-BR')}
+                </span>
+              </div>
               <button
                 onClick={() => removerLembrete(item.id)}
                 style={{
