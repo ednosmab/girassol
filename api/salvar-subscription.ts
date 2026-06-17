@@ -45,11 +45,10 @@ function getRedis() {
     incr: (key: string) => exec<number>('INCR', key),
     expire: (key: string, seconds: number) => exec<number>('EXPIRE', key, seconds),
     multi: async (commands: (string | number)[][]): Promise<unknown[]> => {
-      const body: (string | number)[][] = [['MULTI'], ...commands, ['EXEC']];
       const res = await fetch(url, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(commands),
       });
       if (!res.ok) throw new Error(`Redis error ${res.status}`);
       const json = await res.json();
@@ -64,7 +63,7 @@ async function rateLimit(redis: ReturnType<typeof getRedis>, key: string, limit 
     ['INCR', `ratelimit:${key}`],
     ['EXPIRE', `ratelimit:${key}`, windowSec],
   ]);
-  const current = results[1] as number;
+  const current = Number(results[0]);
   return { allowed: current <= limit, remaining: Math.max(0, limit - current) };
 }
 
