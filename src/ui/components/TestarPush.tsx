@@ -7,10 +7,8 @@ export function TestarPush() {
   const [mostrarPainel, setMostrarPainel] = useState(false);
 
   const isDev = import.meta.env.DEV;
-  const isTestMode = typeof localStorage !== 'undefined' && localStorage.getItem('girassol_test_mode') === 'true';
-  const hasParam = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('test');
 
-  if (!isDev && !isTestMode && !hasParam) return null;
+  if (!isDev) return null;
 
   const callTestPush = async (body: Record<string, unknown>) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };

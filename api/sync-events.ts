@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import { timingSafeEqual } from 'crypto';
+
+function safeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
+}
 
 interface ApiRequest {
   method?: string;
@@ -35,12 +43,27 @@ function getRedis() {
     },
     incr: (key: string) => exec<number>('INCR', key),
     expire: (key: string, seconds: number) => exec<number>('EXPIRE', key, seconds),
+    multi: async (commands: (string | number)[][]): Promise<unknown[]> => {
+      const body: (string | number)[][] = [['MULTI'], ...commands, ['EXEC']];
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`Redis error ${res.status}`);
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      return json.result as unknown[];
+    },
   };
 }
 
 async function rateLimit(redis: ReturnType<typeof getRedis>, key: string, limit = 10, windowSec = 60) {
-  const current = await redis.incr(`ratelimit:${key}`);
-  if (current === 1) await redis.expire(`ratelimit:${key}`, windowSec);
+  const results = await redis.multi([
+    ['INCR', `ratelimit:${key}`],
+    ['EXPIRE', `ratelimit:${key}`, windowSec],
+  ]);
+  const current = results[1] as number;
   return { allowed: current <= limit, remaining: Math.max(0, limit - current) };
 }
 
@@ -64,7 +87,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
 
     const apiKey = req.headers['x-api-key'];
-    if (apiKey !== process.env.VITE_SYNC_API_KEY) {
+    if (!apiKey || !safeCompare(String(apiKey), process.env.VITE_SYNC_API_KEY ?? '')) {
       return res.status(401).json({ error: 'Não autorizado' });
     }
 

@@ -9,7 +9,7 @@ const outboxStore = localforage.createInstance({
 
 export const outbox = {
   async adicionar(event: Omit<OutboxEvent, 'id' | 'status' | 'retryCount' | 'createdAt' | 'updatedAt' | 'maxRetries'> & { maxRetries?: number }): Promise<OutboxEvent> {
-    const id = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const id = `evt_${Date.now()}_${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).substring(2, 11)}`;
     const now = Date.now();
     const fullEvent: OutboxEvent = {
       ...event,

@@ -34,7 +34,16 @@ function getRedis() {
       return exec(...args);
     },
     del: (key: string) => exec('DEL', key),
-    keys: (pattern: string) => exec<string[]>('KEYS', pattern),
+    scan: async (pattern: string): Promise<string[]> => {
+      const allKeys: string[] = [];
+      let cursor = '0';
+      do {
+        const result = await exec<[string, string[]]>('SCAN', Number(cursor), 'MATCH', pattern, 'COUNT', 100);
+        cursor = result[0];
+        allKeys.push(...result[1]);
+      } while (cursor !== '0');
+      return allKeys;
+    },
   };
 }
 
@@ -70,7 +79,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
 
     const redis = getRedis();
-    const chaves = await redis.keys('lembrete:*');
+    const chaves = await redis.scan('lembrete:*');
     const agora = new Date();
 
     const mensagens: Record<string, string> = {

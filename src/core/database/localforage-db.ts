@@ -45,5 +45,5 @@ export function formatarDataPtBR(data: Date): string {
 }
 
 export function gerarIdUnico(): string {
-  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  return `${Date.now()}-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).substring(2, 11)}`;
 }
