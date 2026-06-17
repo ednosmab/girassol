@@ -34,9 +34,9 @@ export function Toast({ mensagem, icone, cor, duracao = 3500, onFim }: ToastProp
       `}</style>
       <div style={{
         position: 'fixed',
-        bottom: '24px',
+        top: '50%',
         left: '50%',
-        transform: 'translateX(-50%)',
+        transform: 'translate(-50%, -50%)',
         zIndex: 11000,
         animation: visivel
           ? 'toastSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards'

@@ -4,7 +4,6 @@ import { Header } from './ui/components/Header';
 import { Navigation } from './ui/components/Navigation';
 import { InstallPrompt } from './ui/components/InstallPrompt';
 import { TestarPush } from './ui/components/TestarPush';
-import { SyncStatus } from './ui/components/SyncStatus';
 import { DiarioView } from './ui/views/DiarioView';
 import { CuidadosView } from './ui/views/CuidadosView';
 import { OrigemView } from './ui/views/OrigemView';
@@ -43,7 +42,6 @@ export default function App() {
         margin: 0,
         padding: 0
       }}>
-        <SyncStatus />
         <Header />
         <Navigation abaAtiva={abaAtiva} onTrocarAba={setAbaAtiva} />
         <main style={{ paddingBottom: '60px' }}>
