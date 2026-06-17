@@ -82,6 +82,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     let enviados = 0;
     let apagados = 0;
     let erros = 0;
+    const errosDetalhes: string[] = [];
 
     for (const chave of chaves) {
       const lembrete = await redis.get<LembreteKV>(chave);
@@ -112,15 +113,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         }
       } catch (error) {
         const statusCode = (error as any)?.statusCode;
+        const errMsg = (error as any)?.message || String(error);
         erros++;
-        console.error(`[verificar-lembretes] falha ao enviar (${lembrete.tipo}, statusCode=${statusCode}):`, (error as any)?.message || error);
+        errosDetalhes.push(`${lembrete.tipo}: ${errMsg} (code=${statusCode})`);
 
         if (isPermanentError(statusCode)) {
           console.warn(`[verificar-lembretes] subscription morta (${statusCode}), removendo chave`);
-          await redis.del(chave);
-          apagados++;
-        } else if (!statusCode) {
-          console.warn(`[verificar-lembretes] erro sem statusCode, removendo subscription inválida`);
           await redis.del(chave);
           apagados++;
         } else if (isTransientError(statusCode)) {
@@ -133,7 +131,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       totalVerificados: chaves.length,
       enviados,
       apagados,
-      erros
+      erros,
+      errosDetalhes
     });
   } catch (error) {
     console.error('verificar-lembretes error:', error instanceof Error ? error.message : error);
