@@ -44,7 +44,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
         const response = await fetch('/api/sync-events', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-API-Key': (import.meta as any).env?.VITE_SYNC_API_KEY ?? '' },
           body: JSON.stringify({
             events: [{
               id: evento.id,
