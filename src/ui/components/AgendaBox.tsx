@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { agendarLembrete, obterUltimoCuidado, verificarSuporteNotificacoes } from '../../core/use-cases/notificacao-nativa';
 import { registrarCuidadoComOutbox } from '../../core/use-cases/registrar-cuidado-com-outbox';
+import { Toast } from './Toast';
 
 interface AgendaBoxProps {
   onCuidadoRegistrado?: () => void;
 }
 
-const tiposCuidado: { tipo: 'rega' | 'sol' | 'adubo'; label: string; icone: string; cor: string; textoBotao: string }[] = [
-  { tipo: 'rega', label: 'Rega', icone: '💧', cor: '#3A86FF', textoBotao: 'Registrei que Reguei Hoje' },
-  { tipo: 'sol', label: 'Sol', icone: '☀️', cor: '#D98E04', textoBotao: 'Garanti as 6h de Sol Forte' },
-  { tipo: 'adubo', label: 'Adubo', icone: '🌱', cor: '#40513B', textoBotao: 'Coloquei o Fertilizante' }
+const tiposCuidado: { tipo: 'rega' | 'sol' | 'adubo'; label: string; icone: string; cor: string; textoBotao: string; mensagem: string; dias: string }[] = [
+  { tipo: 'rega', label: 'Rega', icone: '💧', cor: '#3A86FF', textoBotao: 'Registrei que Reguei Hoje', mensagem: 'Registrado! Próxima rega em 2 dias', dias: '2 dias' },
+  { tipo: 'sol', label: 'Sol', icone: '☀️', cor: '#D98E04', textoBotao: 'Garanti as 6h de Sol Forte', mensagem: 'Registrado! Sol todos os dias!', dias: '1 dia' },
+  { tipo: 'adubo', label: 'Adubo', icone: '🌱', cor: '#40513B', textoBotao: 'Coloquei o Fertilizante', mensagem: 'Registrado! Próximo adubo em 15 dias', dias: '15 dias' }
 ];
 
 export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
@@ -17,6 +18,7 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
   const [permissaoStatus, setPermissaoStatus] = useState(verificarSuporteNotificacoes());
   const [mostrarDialogoPermissao, setMostrarDialogoPermissao] = useState(false);
   const [tipoPendente, setTipoPendente] = useState<'rega' | 'sol' | 'adubo' | null>(null);
+  const [toast, setToast] = useState<{ mensagem: string; icone: string; cor: string } | null>(null);
 
   const carregarCountdowns = async () => {
     setProximos({
@@ -34,6 +36,9 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
     await registrarCuidadoComOutbox({ tipo });
     await carregarCountdowns();
     onCuidadoRegistrado?.();
+
+    const config = tiposCuidado.find(t => t.tipo === tipo)!;
+    setToast({ mensagem: config.mensagem, icone: config.icone, cor: config.cor });
 
     const status = verificarSuporteNotificacoes();
     setPermissaoStatus(status);
@@ -335,6 +340,15 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
             )}
           </div>
         </div>
+      )}
+
+      {toast && (
+        <Toast
+          mensagem={toast.mensagem}
+          icone={toast.icone}
+          cor={toast.cor}
+          onFim={() => setToast(null)}
+        />
       )}
     </div>
   );
