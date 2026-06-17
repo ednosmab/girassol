@@ -1,11 +1,12 @@
 import { z } from 'zod';
-import { timingSafeEqual } from 'crypto';
 
 function safeCompare(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) return false;
-  return timingSafeEqual(bufA, bufB);
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
 }
 
 interface ApiRequest {
@@ -43,26 +44,12 @@ function getRedis() {
     },
     incr: (key: string) => exec<number>('INCR', key),
     expire: (key: string, seconds: number) => exec<number>('EXPIRE', key, seconds),
-    multi: async (commands: (string | number)[][]): Promise<unknown[]> => {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(commands),
-      });
-      if (!res.ok) throw new Error(`Redis error ${res.status}`);
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      return json.result as unknown[];
-    },
   };
 }
 
 async function rateLimit(redis: ReturnType<typeof getRedis>, key: string, limit = 10, windowSec = 60) {
-  const results = await redis.multi([
-    ['INCR', `ratelimit:${key}`],
-    ['EXPIRE', `ratelimit:${key}`, windowSec],
-  ]);
-  const current = Number(results[0]);
+  const current = await redis.incr(`ratelimit:${key}`);
+  if (current === 1) await redis.expire(`ratelimit:${key}`, windowSec);
   return { allowed: current <= limit, remaining: Math.max(0, limit - current) };
 }
 
