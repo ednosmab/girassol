@@ -35,13 +35,16 @@ export function Toast({ mensagem, icone, cor, duracao = 3500, onFim }: ToastProp
       <div style={{
         position: 'fixed',
         top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
+        left: '0',
+        right: '0',
+        display: 'flex',
+        justifyContent: 'center',
         zIndex: 11000,
         animation: visivel
           ? 'toastSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards'
           : 'toastFadeOut 0.35s ease-in forwards',
-        pointerEvents: 'none'
+        pointerEvents: 'none',
+        transform: 'translateY(-50%)'
       }}>
         <div style={{
           background: '#FFFFFF',
