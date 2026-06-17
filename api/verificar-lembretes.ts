@@ -113,7 +113,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       } catch (error) {
         const statusCode = (error as any)?.statusCode;
         erros++;
-        console.error(`[verificar-lembretes] falha ao enviar (${tipo}, statusCode=${statusCode}):`, (error as any)?.message || error);
+        console.error(`[verificar-lembretes] falha ao enviar (${lembrete.tipo}, statusCode=${statusCode}):`, (error as any)?.message || error);
 
         if (isPermanentError(statusCode)) {
           console.warn(`[verificar-lembretes] subscription morta (${statusCode}), removendo chave`);
