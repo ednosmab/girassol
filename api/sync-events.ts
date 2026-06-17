@@ -27,7 +27,7 @@ function getRedis() {
     return json.result as T;
   }
   return {
-    get: <T = unknown>(key: string) => exec<T | null>('GET', key),
+    get: <T = unknown>(key: string) => exec<string | null>('GET', key).then(v => v ? (JSON.parse(v) as T) : null),
     set: (key: string, value: unknown, opts?: { ex?: number }) => {
       const args: (string | number)[] = ['SET', key, typeof value === 'string' ? value : JSON.stringify(value)];
       if (opts?.ex) args.push('EX', opts.ex);
