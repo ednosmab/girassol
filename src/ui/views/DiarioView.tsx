@@ -35,7 +35,11 @@ export function DiarioView() {
     carregarLembretes();
 
     obterTiposSemRegistro().then((faltantes) => {
-      if (faltantes.length > 0) setModalAberto(true);
+      const jaViu = localStorage.getItem('girassol_boas_vindas_visto');
+      if (faltantes.length > 0 && !jaViu) {
+        setModalAberto(true);
+        localStorage.setItem('girassol_boas_vindas_visto', 'true');
+      }
     });
   }, []);
 

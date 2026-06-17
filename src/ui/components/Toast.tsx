@@ -47,6 +47,7 @@ export function Toast({ mensagem, icone, cor, duracao = 3500, onFim }: ToastProp
         transform: 'translateY(-50%)'
       }}>
         <div style={{
+          position: 'relative',
           background: '#FFFFFF',
           borderRadius: '16px',
           padding: '14px 22px',
@@ -56,7 +57,8 @@ export function Toast({ mensagem, icone, cor, duracao = 3500, onFim }: ToastProp
           boxShadow: `0 8px 30px ${cor}33, 0 2px 8px rgba(0,0,0,0.08)`,
           border: `2px solid ${cor}22`,
           maxWidth: '90vw',
-          whiteSpace: 'nowrap'
+          whiteSpace: 'nowrap',
+          overflow: 'hidden'
         }}>
           <span style={{ fontSize: '1.4rem' }}>{icone}</span>
           <span style={{
