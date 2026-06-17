@@ -68,6 +68,12 @@ export function AgendaBox({ onCuidadoRegistrado }: AgendaBoxProps) {
 
     if (granted) {
       setPermissaoStatus('supported');
+      if (tipoPendente) {
+        void agendarLembrete(tipoPendente).catch((error) => {
+          console.error('Falha ao agendar lembrete:', error);
+        });
+        setTipoPendente(null);
+      }
     } else {
       setPermissaoStatus(verificarSuporteNotificacoes());
     }

@@ -13,11 +13,8 @@ interface ApiResponse {
 }
 
 function getRedis() {
-  const rawUrl = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
-  const rawToken = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
-  if (!rawUrl || !rawToken) throw new Error('Redis não configurado');
-  const url = rawUrl;
-  const token = rawToken;
+  const url = (process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL) as string;
+  const token = (process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN) as string;
   async function exec<T = unknown>(...args: (string | number)[]): Promise<T> {
     const res = await fetch(url, {
       method: 'POST',
@@ -56,7 +53,7 @@ interface LembreteKV {
 }
 
 function isTransientError(statusCode?: number): boolean {
-  if (!statusCode) return true;
+  if (!statusCode) return false;
   return statusCode === 408 || statusCode === 429 || (statusCode >= 500 && statusCode < 600);
 }
 
@@ -106,7 +103,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         if (lembrete.tipo === 'sol') {
           const amanha = new Date();
           amanha.setDate(amanha.getDate() + 1);
-          amanha.setHours(8, 0, 0, 0);
+          amanha.setUTCHours(11, 0, 0, 0);
           lembrete.dataDisparo = amanha.toISOString();
           await redis.set(chave, lembrete);
         } else {
@@ -116,15 +113,18 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       } catch (error) {
         const statusCode = (error as any)?.statusCode;
         erros++;
+        console.error(`[verificar-lembretes] falha ao enviar (${tipo}, statusCode=${statusCode}):`, (error as any)?.message || error);
 
         if (isPermanentError(statusCode)) {
           console.warn(`[verificar-lembretes] subscription morta (${statusCode}), removendo chave`);
           await redis.del(chave);
           apagados++;
+        } else if (!statusCode) {
+          console.warn(`[verificar-lembretes] erro sem statusCode, removendo subscription inválida`);
+          await redis.del(chave);
+          apagados++;
         } else if (isTransientError(statusCode)) {
-          console.warn(`[verificar-lembretes] erro transitório (${statusCode})`);
-        } else {
-          console.error(`[verificar-lembretes] erro desconhecido:`, error);
+          console.warn(`[verificar-lembretes] erro transitório (${statusCode}), manter subscription`);
         }
       }
     }

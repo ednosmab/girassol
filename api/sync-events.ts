@@ -13,11 +13,8 @@ interface ApiResponse {
 }
 
 function getRedis() {
-  const rawUrl = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
-  const rawToken = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
-  if (!rawUrl || !rawToken) throw new Error('Redis não configurado');
-  const url = rawUrl;
-  const token = rawToken;
+  const url = (process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL) as string;
+  const token = (process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN) as string;
   async function exec<T = unknown>(...args: (string | number)[]): Promise<T> {
     const res = await fetch(url, {
       method: 'POST',
