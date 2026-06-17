@@ -26,7 +26,7 @@ npm run preview
 ## Testes
 
 ```bash
-# Executar todos os testes (108 testes, 15 suítes)
+# Executar todos os testes (101 testes, 14 suítes)
 npm test
 
 # Executar com cobertura
@@ -93,11 +93,13 @@ git push origin main:staging
 
 ```bash
 # Variáveis configuradas no Vercel Dashboard:
-# NEXT_PUBLIC_VAPID_PUBLIC_KEY   — Chave pública VAPID
-# VAPID_PRIVATE_KEY              — Chave privada VAPID
+# NEXT_PUBLIC_VAPID_PUBLIC_KEY   — Chave pública VAPID (visível no cliente)
+# VITE_VAPID_PUBLIC_KEY          — Chave pública VAPID (alias para compatibilidade)
+# VAPID_PRIVATE_KEY              — Chave privada VAPID (servidor apenas)
 # UPSTASH_REDIS_REST_URL         — URL Upstash Redis
 # UPSTASH_REDIS_REST_TOKEN       — Token Upstash Redis
 # CRON_SECRET                    — Segredo para autenticação do cron
+# VITE_SYNC_API_KEY              — Chave de API para autenticação do sync
 ```
 
 ## Redis (Upstash) — Manutenção

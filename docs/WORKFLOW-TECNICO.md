@@ -102,11 +102,13 @@ O browser detecta nova versão por **comparação byte a byte** do arquivo `sw.j
 │                                                              │
 │  3. triggerSync() processa a outbox                          │
 │     ├─ Marca evento como "processing"                        │
-│     ├─ Envia para /api/sync-events                           │
+│     ├─ Envia para /api/sync-events (com X-API-Key)           │
 │     ├─ Marca como "synced" (sucesso)                         │
 │     └─ Incrementa retry (falha, máx 5x)                      │
 │                                                              │
 │  4. Servidor processa                                        │
+│     ├─ Autentica X-API-Key (timing-safe comparison)          │
+│     ├─ Rate limit: Redis INCR + EXPIRE (10 req/min)          │
 │     ├─ Verifica idempotência (processed:{key})               │
 │     ├─ Armazena evento no Redis                              │
 │     └─ Retorna sucesso ou duplicata                          │
@@ -137,20 +139,21 @@ O browser detecta nova versão por **comparação byte a byte** do arquivo `sw.j
 │                    PUSH NOTIFICATION FLOW                      │
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
-│  1. App (Cliente)                                            │
-│     └─ registration.pushManager.subscribe()                  │
-│        (gera subscription push)                              │
+│  1. Usuário registra cuidado no app                          │
+│     └─ handlePermitir() no AgendaBox:                        │
+│        a. Salva cuidado via registrarCuidadoComOutbox()       │
+│        b. Solicita permissão de notificação                   │
+│        c. Se concedida: registration.pushManager.subscribe()  │
+│        d. Envia subscription + tipo para                      │
+│           /api/salvar-subscription (com X-API-Key)            │
+│        e. Servidor agendar no Redis:                         │
+│           lembrete:{userId}:{tipo} com dataDisparo            │
+│        f. Toast: "Registrado! Próxima rega em 2 dias"        │
 │                                                              │
-│  2. App → /api/salvar-subscription                           │
-│     ├─ Valida com Zod                                        │
-│     ├─ Rate limit: 10 req/min por IP                         │
-│     ├─ Calcula próxima data de disparo                       │
-│     └─ Salva no Redis: lembrete:{userId}:{tipo}              │
-│                                                              │
-│  3. Cron (08:00 BRT)                                         │
+│  2. Cron (08:00 BRT = 11:00 UTC)                             │
 │     └─ /api/verificar-lembretes (GET)                        │
 │        ├─ Auth: Authorization: Bearer CRON_SECRET            │
-│        ├─ Scanneia chaves lembrete:*                         │
+│        ├─ Scanneia chaves lembrete:* via SCAN (não KEYS)     │
 │        ├─ Para cada lembrete com dataDisparo <= agora:       │
 │        │   ├─ Envia push via web-push                        │
 │        │   ├─ Se "sol" (diário): reagenda para próximo dia   │
@@ -158,10 +161,11 @@ O browser detecta nova versão por **comparação byte a byte** do arquivo `sw.j
 │        └─ Erro 404/410: remove subscription permanentemente  │
 │        └─ Erro 429/5xx: mantém (retry no próximo cron)       │
 │                                                              │
-│  4. Service Worker                                           │
+│  3. Service Worker                                           │
 │     └─ onpush → showNotification()                           │
+│        (valida origin do push, sanitiza payload)              │
 │                                                              │
-│  5. Usuário clica na notificação                             │
+│  4. Usuário clica na notificação                             │
 │     └─ notificationclick → focus ou openWindow('/')           │
 │                                                              │
 └──────────────────────────────────────────────────────────────┘
@@ -171,9 +175,10 @@ O browser detecta nova versão por **comparação byte a byte** do arquivo `sw.j
 
 | Endpoint | Quem chama | Auth |
 |----------|-----------|------|
-| `POST /api/salvar-subscription` | Cliente (usuária) | nenhuma (rate limit) |
+| `POST /api/salvar-subscription` | Cliente (usuária) | `X-API-Key` (rate limit) |
+| `POST /api/sync-events` | Cliente (SyncContext) | `X-API-Key` (rate limit) |
 | `GET /api/verificar-lembretes` | Vercel Cron | `Authorization: Bearer CRON_SECRET` |
-| `POST /api/test-push` | Admin (TestarPush) | `X-Test-Token: CRON_SECRET` (produção) |
+| `POST /api/test-push` | TestarPush (dev-only) | `X-Test-Token: CRON_SECRET` (produção) |
 
 ### 3.3 Classificação de Erros (verificar-lembretes)
 
@@ -184,6 +189,18 @@ O browser detecta nova versão por **comparação byte a byte** do arquivo `sw.j
 | 429 | Transiente | Mantém (retry no próximo cron) |
 | 5xx | Transiente | Mantém (retry no próximo cron) |
 
+### 3.4 Toast Feedback
+
+Após cada ação de registro, o app exibe um toast elegante (centralizado, com barra de progresso):
+
+| Cuidado | Mensagem |
+|---------|----------|
+| Rega | "Registrado! Próxima rega em 2 dias" |
+| Sol | "Sol todos os dias!" |
+| Adubo | "Registrado! Próximo adubo em 15 dias" |
+
+O toast desaparece automaticamente após 3.5 segundos com animação slideUp.
+
 ---
 
 ## 4. APIs Serverless
@@ -192,25 +209,50 @@ O browser detecta nova versão por **comparação byte a byte** do arquivo `sw.j
 
 | Método | Path | Descrição | Validação |
 |--------|------|-----------|-----------|
-| `POST` | `/api/salvar-subscription` | Salva subscription push | Zod schema |
-| `POST` | `/api/sync-events` | Recebe eventos da outbox | Zod schema + max 100 eventos |
+| `POST` | `/api/salvar-subscription` | Salva subscription push | Zod + X-API-Key + rate limit |
+| `POST` | `/api/sync-events` | Recebe eventos da outbox | Zod + X-API-Key + rate limit |
 | `GET` | `/api/verificar-lembretes` | Cron: envia push pendentes | Bearer token |
-| `POST` | `/api/test-push` | Admin: testa push | X-Test-Token |
+| `POST` | `/api/test-push` | Dev-only: testa push | X-Test-Token |
 
-### 4.2 Segurança
+### 4.2 Arquitetura Self-Contained
 
+Cada arquivo API é **autocontido** — Vercel não consegue resolver imports locais `./shared/`. Cada endpoint inlineda sua própria conexão Redis via `fetch()` raw ao Upstash REST API. Não há dependência do SDK `@upstash/redis` nas API functions.
+
+### 4.3 Segurança
+
+- **X-API-Key**: Chave estática no header (visível no bundle, aceitável para 50 usuários, bloqueia bots)
+- **Timing-safe comparison**: `safeCompare()` — comparação XOR byte-a-byte sem módulo `crypto` do Node (Vercel serverless não expõe)
+- **Rate Limit**: Redis INCR + EXPIRE (10 req/min por IP) — aceita race condition leve para 50 usuários
 - **Zod**: Validação de todos os inputs
-- **Rate Limit**: 10 req/min por IP (in-memory)
 - **CRON_SECRET**: Autenticação do cron em produção
 - **VAPID_PRIVATE_KEY**: Nunca exposta ao cliente
+- **CSP header**: Adicionado ao `vercel.json` com allowlist para `vercel.live`
 
-### 4.3 Redis (Upstash)
+### 4.4 Redis (Upstash) — Raw REST
+
+```typescript
+// api/shared/redis.ts (inlineda em cada endpoint)
+async function redisGet(key: string): Promise<string | null> {
+  const res = await fetch(`${UPSTASH_REDIS_REST_URL}/get/${key}`, {
+    headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` }
+  });
+  const data = await res.json();
+  return data.result ?? null; // REST retorna string, não objeto
+}
+
+// NOTA: redis.get() retorna string do Upstash REST.
+// É necessário JSON.parse() para obter o objeto.
+const subscription = JSON.parse(await redisGet(`lembrete:${userId}:${tipo}`));
+```
+
+### 4.5 Keys Redis
 
 | Padrão de Chave | Conteúdo | TTL |
 |-----------------|----------|-----|
 | `lembrete:{userId}:{tipo}` | Push subscription + schedule | até processar |
 | `processed:{idempotencyKey}` | boolean `true` | 30 dias |
 | `event:{eventId}` | Payload do evento | sem TTL |
+| `ratelimit:{ip}:{endpoint}` | Contador de requests | 60s |
 
 ---
 
@@ -249,6 +291,7 @@ interface Lembrete {
 - Dados são **locais apenas** (sem sync entre dispositivos)
 - Soft-delete: `ativo: false` (não remove do IndexedDB)
 - Dados vinculados ao dispositivo via push subscription
+- UUIDs gerados via `crypto.randomUUID()` com fallback
 
 ---
 
@@ -289,3 +332,4 @@ código fonte
 
 - **Horário**: 11:00 UTC = 08:00 BRT
 - **Frequência**: Diária
+- **Hobby plan**: Intervalo mínimo de 1 dia entre execuções

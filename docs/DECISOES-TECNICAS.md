@@ -16,11 +16,12 @@
 8. [PWA — Ícones e Manifesto](#8-pwa--ícones-e-manifesto)
 9. [API Serverless — Vercel Functions](#9-api-serverless--vercel-functions)
 10. [Validação com Zod](#10-validação-com-zod)
-11. [Testes](#11-testes)
-12. [Deploy e Infraestrutura](#12-deploy-e-infraestrutura)
-13. [Fluxos Críticos](#13-fluxos-críticos)
-14. [Decisões de Design](#14-decisões-de-design)
-15. [Problemas Encontrados e Soluções](#15-problemas-encontrados-e-soluções)
+11. [Segurança](#11-segurança)
+12. [Testes](#12-testes)
+13. [Deploy e Infraestrutura](#13-deploy-e-infraestrutura)
+14. [Fluxos Críticos](#14-fluxos-críticos)
+15. [Decisões de Design](#15-decisões-de-design)
+16. [Problemas Encontrados e Soluções](#16-problemas-encontrados-e-soluções)
 ---
 
 ## 1. Visão Geral
@@ -57,7 +58,7 @@
 | Tecnologia | Justificativa |
 |------------|---------------|
 | **Vercel Serverless Functions** | Zero config, escala automática, integrado com deploy |
-| **Vercel KV (Upstash Redis)** | KV store gerenciado, baixa latência, sem infraestrutura |
+| **Upstash Redis (REST API)** | KV store gerenciado, baixa latência, sem infraestrutura |
 | **web-push** | Padrão W3C para Web Push, suporte VAPID |
 
 ### Dados
@@ -207,6 +208,15 @@ interface Lembrete {
 - Sincronização entre dispositivos exigiria backend complexo + auth
 - Para o caso de uso (diário pessoal), dados locais são suficientes
 
+### 4.4 UUIDs: crypto.randomUUID()
+
+**Decisão:** Usar `crypto.randomUUID()` para gerar IDs únicos, com fallback para `Math.random()`.
+
+**Justificativa:**
+- `crypto.randomUUID()` é Web Crypto API nativa (disponível em todos browsers modernos)
+- IDs criptograficamente seguros, sem colisões
+- Fallback garante compatibilidade em ambientes não seguros (localhost, HTTP)
+
 ---
 
 ## 5. Padrão Outbox — Sincronização
@@ -255,6 +265,7 @@ const triggerSync = async () => {
     try {
       await fetch('/api/sync-events', {
         method: 'POST',
+        headers: { 'X-API-Key': VITE_SYNC_API_KEY },
         body: JSON.stringify({ events: [evento] })
       });
       await marcarSincronizado(evento.id);
@@ -285,14 +296,14 @@ const triggerSync = async () => {
 
 ```typescript
 // Server-side (sync-events.ts)
-import { getRedis } from './_shared/redis-client';
+// Cada arquivo API é self-contained (Vercel não resolve ./shared/)
+// Redis via raw fetch ao Upstash REST API
 
-const kv = getRedis();
-const jaProcessado = await kv.get(`processed:${idempotencyKey}`);
-if (jaProcessado) {
+const processed = await redisGet(`processed:${idempotencyKey}`);
+if (processed) {
   return { status: 'duplicate' };
 }
-await kv.set(`processed:${idempotencyKey}`, true, { ex: 86400 * 30 }); // 30 dias TTL
+await redisSet(`processed:${idempotencyKey}`, 'true', 'EX', 86400 * 30); // 30 dias TTL
 ```
 
 ### 5.6 Limpeza da Outbox
@@ -418,16 +429,20 @@ workbox: {
 
 - **Public key**: via `getVapidPublicKey()` — lê de `import.meta.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY` (deferred check, sem throw no load do módulo)
 - **Private key**: Armazenada apenas no servidor (variável de ambiente `VAPID_PRIVATE_KEY`)
-- **Servidor**: Upstash Redis (via `@upstash/redis`)
+- **Servidor**: Upstash Redis (via raw fetch REST API)
 
 ### 7.3 Fluxo de Notificação
 
-1. **Cliente**: Registra subscription push via `registration.pushManager.subscribe()`
-2. **Cliente**: Envia subscription para `/api/salvar-subscription`
-3. **Servidor**: Calcula próxima data de disparo baseada no tipo de cuidado
-4. **Servidor**: Armazena no Upstash Redis como `lembrete:{userId}:{tipo}`
-5. **Cron (08:00 BRT)**: Verifica lembretes pendentes e envia push
-6. **Cliente**: SW recebe push e exibe notificação nativa
+1. **Cliente**: Usuário clica em botão de cuidado → `handlePermitir()` no AgendaBox
+2. **Cliente**: Salva cuidado via `registrarCuidadoComOutbox()` (UI atualiza primeiro)
+3. **Cliente**: Solicita permissão de notificação ao browser
+4. **Cliente**: Se concedida, cria subscription push via `registration.pushManager.subscribe()`
+5. **Cliente**: Envia subscription + tipo para `/api/salvar-subscription` (com `X-API-Key`)
+6. **Servidor**: Calcula próxima data de disparo baseada no tipo de cuidado
+7. **Servidor**: Armazena no Upstash Redis como `lembrete:{userId}:{tipo}`
+8. **Cliente**: Toast exibe confirmação ("Registrado! Próxima rega em 2 dias")
+9. **Cron (08:00 BRT)**: Verifica lembretes pendentes e envia push
+10. **Cliente**: SW recebe push e exibe notificação nativa
 
 ### 7.4 Decoupling: Notificação vs UI
 
@@ -435,7 +450,7 @@ workbox: {
 
 ```typescript
 // AgendaBox.tsx
-const handleAgendar = async (tipo) => {
+const handlePermitir = async (tipo) => {
   await registrarCuidadoComOutbox(cuidado);  // UI atualiza primeiro
   await carregarCountdowns();                 // Countdown atualiza
 
@@ -462,6 +477,24 @@ const handleAgendar = async (tipo) => {
 **Horário:** 11:00 UTC = 08:00 BRT (horário ideal para notificação matinal).
 
 **Autenticação:** `Authorization: Bearer {CRON_SECRET}` (apenas em produção).
+
+**Hobby plan**: Vercel exige intervalo mínimo de 1 dia entre execuções de cron.
+
+### 7.7 Toast Feedback
+
+Após cada ação de registro, o app exibe um toast elegante:
+
+```typescript
+// Toast.tsx
+// Centralizado no viewport, com barra de progresso
+// Animação slideUp, auto-dismiss 3.5s
+```
+
+| Cuidado | Mensagem |
+|---------|----------|
+| Rega | "Registrado! Próxima rega em 2 dias" |
+| Sol | "Sol todos os dias!" |
+| Adubo | "Registrado! Próximo adubo em 15 dias" |
 
 ---
 
@@ -543,74 +576,62 @@ maskable.paste(content_resized, (offset_x, offset_y), content_resized)
 
 | Método | Path | Descrição | Validação |
 |--------|------|-----------|-----------|
-| `POST` | `/api/salvar-subscription` | Salva subscription push no Upstash Redis | Zod + rate limit |
-| `POST` | `/api/sync-events` | Recebe eventos da outbox do cliente | Zod + rate limit + max 100 |
+| `POST` | `/api/salvar-subscription` | Salva subscription push no Upstash Redis | Zod + X-API-Key + rate limit |
+| `POST` | `/api/sync-events` | Recebe eventos da outbox do cliente | Zod + X-API-Key + rate limit |
 | `GET` | `/api/verificar-lembretes` | Cron: envia notificações pendentes | Bearer token |
-| `POST` | `/api/test-push` | Admin: testa push notification | `X-Test-Token: CRON_SECRET` |
+| `POST` | `/api/test-push` | Dev-only: testa push notification | `X-Test-Token: CRON_SECRET` |
 
-### 9.2 Redis Client: @upstash/redis
+### 9.2 Arquitetura Self-Contained
 
-**Decisão:** Migrar de `@vercel/kv` para `@upstash/redis` (Vercel deprecou `@vercel/kv`, recomendou migração).
+**Decisão:** Cada arquivo API é **autocontido** — Vercel não consegue resolver imports locais `./shared/`. Cada endpoint inlineda sua própria conexão Redis via `fetch()` raw ao Upstash REST API.
 
 ```typescript
-// api/_shared/redis-client.ts
-import { Redis } from '@upstash/redis';
+// api/sync-events.ts (exemplo simplificado)
+// Cada API file é independente — sem imports de ./shared/
 
-let redisInstance: Redis | null = null;
-
-export function getRedis(): Redis {
-  if (!redisInstance) {
-    redisInstance = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    });
-  }
-  return redisInstance;
-}
-
-// Para testes: injetável sem ESM mocking
-export function _setRedisForTests(redis: Redis | null): void {
-  redisInstance = redis;
+async function redisGet(key: string): Promise<string | null> {
+  const res = await fetch(`${UPSTASH_REDIS_REST_URL}/get/${key}`, {
+    headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` }
+  });
+  const data = await res.json();
+  return data.result ?? null; // REST retorna string, não objeto
 }
 ```
 
 **Justificativa:**
-- Factory injetável permite testes sem complexidade de ESM mocking
-- `@upstash/redis` é o SDK oficial do Upstash (Vercel recomenda via Marketplace)
-- Conexão lazy (criada sob demanda, não no import do módulo)
+- Vercel's bundler não resolve `./shared/` imports entre API files
+- Cada function é standalone — zero dependências compartilhadas
+- Mais fácil de debugar e deployar independentemente
 
-### 9.3 Estrutura de uma Function
+### 9.3 Redis Client: Raw REST (não SDK)
+
+**Decisão:** Usar `fetch()` raw ao Upstash REST API em vez do SDK `@upstash/redis`.
 
 ```typescript
-// api/salvar-subscription.ts
-import { getRedis } from './_shared/redis-client';
-import { z } from 'zod';
-import { rateLimit } from './_shared/rate-limit';
+// Em cada API file:
+const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL!;
+const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN!;
 
-const BodySchema = z.object({
-  endpoint: z.string().url(),
-  keys: z.object({
-    p256dh: z.string(),
-    auth: z.string()
-  })
-});
+async function redisGet(key: string): Promise<string | null> {
+  const res = await fetch(`${UPSTASH_REDIS_REST_URL}/get/${key}`, {
+    headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` }
+  });
+  const data = await res.json();
+  return data.result ?? null;
+}
 
-export default async function handler(req: NextRequest) {
-  if (req.method !== 'POST') {
-    return NextResponse.json({ error: 'Method not allowed' }, { status: 405 });
-  }
-
-  const rate = rateLimit(req);
-  if (!rate.ok) {
-    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-  }
-
-  const body = BodySchema.parse(await req.json());
-  const kv = getRedis();
-  // ... lógica de negócio
-  return NextResponse.json({ success: true });
+async function redisSet(key: string, value: string, ...args: string[]): Promise<void> {
+  await fetch(`${UPSTASH_REDIS_REST_URL}/set/${key}/${value}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` }
+  });
 }
 ```
+
+**Justificativa:**
+- Upstash REST retorna `string` em `GET`, não o objeto — `JSON.parse()` é necessário
+- SDK `@upstash/redis` adiciona overhead desnecessário para 50 usuários
+- Zero dependências externas nas API functions
 
 ### 9.4 Armazenamento no Upstash Redis
 
@@ -624,11 +645,14 @@ export default async function handler(req: NextRequest) {
 
 ### 9.5 Segurança
 
+- **X-API-Key**: Chave estática no header (visível no bundle, aceitável para 50 usuários)
+- **Timing-safe comparison**: `safeCompare()` — comparação XOR byte-a-byte sem módulo `crypto` do Node
+- **Rate Limit**: Redis INCR + EXPIRE (10 req/min por IP)
+- **Zod**: Validação de todos os inputs
 - **CRON_SECRET**: Autentica o cron job e endpoint de teste (apenas em produção)
 - **VAPID_PRIVATE_KEY**: Nunca exposta ao cliente
-- **Rate Limit**: 10 req/min por IP (in-memory, por endpoint)
-- **Zod**: Validação de todos os inputs
-- **Classificação de erros**: 404/410 = permanente (remove subscription), 429/5xx = transiente (mantém)
+- **CSP header**: Adicionado ao `vercel.json` com allowlist para `vercel.live`
+- **Service Worker**: Valida origin do push e sanitiza payload
 
 ---
 
@@ -667,9 +691,115 @@ const LembreteSchema = z.object({
 
 ---
 
-## 11. Testes
+## 11. Segurança
 
-### 11.1 Configuração
+### 11.1 Autenticação API (X-API-Key)
+
+**Decisão:** Chave estática `VITE_SYNC_API_KEY` enviada no header `X-API-Key` em cada request.
+
+**Justificativa:**
+- 50 usuários — OAuth/JWT seria overhead desnecessário
+- Chave visível no bundle do cliente, mas bloqueia bots e scraping
+- Rate limit como defesa secundária
+
+### 11.2 Timing-Safe Comparison
+
+**Decisão:** Implementação customizada `safeCompare()` sem usar módulo `crypto` do Node.js.
+
+```typescript
+// api/shared/safe-compare.ts
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+```
+
+**Justificativa:**
+- Vercel serverless não expõe Node.js `crypto.timingSafeEqual`
+- Implementação XOR é constante-time (aceitável para 50 usuários)
+- Previne timing attacks na comparação de API keys
+
+### 11.3 Rate Limiting
+
+**Decisão:** Redis INCR + EXPIRE (10 req/min por IP por endpoint).
+
+```typescript
+// Cada API file inlineda:
+const key = `ratelimit:${ip}:${endpoint}`;
+const count = await redisIncr(key);
+if (count === 1) await redisExpire(key, 60);
+if (count > 10) return 429;
+```
+
+**Justificativa:**
+- Redis INCR + EXPIRE: race condition aceitável para 50 usuários
+- Upstash pipeline (MULTI/EXEC) causava 500 errors
+- Sem memória in-memory (inútil em serverless)
+
+### 11.4 Content Security Policy
+
+**Decisão:** CSP header no `vercel.json` com allowlist mínima.
+
+```json
+{
+  "key": "Content-Security-Policy",
+  "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https://*.upstash.io; ..."
+}
+```
+
+**Justificativa:**
+- Previne XSS e injection
+- `vercel.live` adicionado ao allowlist para preview deployments
+- `unsafe-inline` necessário para React (inline styles)
+
+### 11.5 Service Worker Security
+
+**Decisão:** Validação de origin no listener `message` + sanitização de payload do push.
+
+```javascript
+// public/sw-custom.js
+self.addEventListener('message', (event) => {
+  if (event.origin !== self.location.origin) return; // Bloqueia cross-origin
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
+self.addEventListener('push', (event) => {
+  const data = event.data?.json() ?? {};
+  const title = String(data.title || 'Meu Girassol').slice(0, 100);
+  const body = String(data.body || '').slice(0, 300);
+  // ... exibe notificação sanitizada
+});
+```
+
+### 11.6 TestarPush: Dev-Only
+
+**Decisão:** `TestarPush.tsx` só funciona em desenvolvimento.
+
+```typescript
+// Em produção: componente não renderiza
+// Removido: acesso a localStorage, ?test param, export de chaves
+if (import.meta.env.PROD) return null;
+```
+
+### 11.7 .gitignore
+
+```
+.env
+.env.*
+!.env.example
+```
+
+**Cobertura:** `.env.local`, `.env.vercel`, `.env.staging` — todos ignorados, exceto `.env.example`.
+
+---
+
+## 12. Testes
+
+### 12.1 Configuração
 
 ```typescript
 // jest.config.ts
@@ -685,7 +815,7 @@ export default {
 };
 ```
 
-### 11.2 Suítes de Teste
+### 12.2 Suítes de Teste
 
 | Suíte | Testes | O que valida |
 |-------|--------|--------------|
@@ -701,13 +831,12 @@ export default {
 | `useServiceWorkerUpdate.spec.ts` | 11 | Hook de atualização SW |
 | `redis-client.spec.ts` | 6 | Redis factory injetável |
 | `validation.spec.ts` | 10 | Schemas Zod para APIs |
-| `rate-limit.spec.ts` | 6 | Rate limiting por IP |
 | `test-push-endpoint.spec.ts` | 9 | Endpoint de teste push |
 | `sw-custom.spec.ts` | 8 | SW custom (push, notificationclick, SKIP_WAITING) |
 
-**Total: 15 suítes, 108 testes**
+**Total: 14 suítes, 101 testes**
 
-### 11.3 Comandos
+### 12.3 Comandos
 
 ```bash
 npm test                    # Executa todos os testes
@@ -715,22 +844,22 @@ npm run test:coverage       # Com relatório de cobertura
 npm run lint                # Type checking (tsc --noEmit)
 ```
 
-### 11.4 Cobertura
+### 12.4 Cobertura
 
 Cobertura coletada apenas para `src/core/**/*.ts` (lógica de negócio), excluindo UI e testes.
 
 ---
 
-## 12. Deploy e Infraestrutura
+## 13. Deploy e Infraestrutura
 
-### 12.1 Plataforma: Vercel
+### 13.1 Plataforma: Vercel
 
 | Ambiente | Branch | URL |
 |----------|--------|-----|
 | Produção | `main` | Dominio configurado |
-| Staging | `staging` | Vercel Preview URL |
+| Staging | `staging` | `girassol-git-staging-ednosmabs-projects.vercel.app` |
 
-### 12.2 Build
+### 13.2 Build
 
 ```bash
 npm run build    # tsc && vite build → dist/
@@ -741,17 +870,19 @@ npm run build    # tsc && vite build → dist/
 - `dist/sw.js` — Service Worker gerenciado pelo Workbox
 - `dist/manifest.webmanifest` — Manifesto PWA
 
-### 12.3 Variáveis de Ambiente
+### 13.3 Variáveis de Ambiente
 
 | Variável | Escopo | Descrição |
 |----------|--------|-----------|
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Cliente + Servidor | Chave pública VAPID |
+| `VITE_VAPID_PUBLIC_KEY` | Cliente | Chave pública VAPID (alias) |
 | `VAPID_PRIVATE_KEY` | Servidor | Chave privada VAPID |
 | `UPSTASH_REDIS_REST_URL` | Servidor | URL Upstash Redis |
 | `UPSTASH_REDIS_REST_TOKEN` | Servidor | Token Upstash Redis |
 | `CRON_SECRET` | Servidor | Segredo para autenticação do cron e test-push |
+| `VITE_SYNC_API_KEY` | Cliente + Servidor | Chave de API para autenticação |
 
-### 12.4 Cron Job
+### 13.4 Cron Job
 
 ```json
 { "path": "/api/verificar-lembretes", "schedule": "0 11 * * *" }
@@ -763,26 +894,32 @@ npm run build    # tsc && vite build → dist/
 
 ---
 
-## 13. Fluxos Críticos
+## 14. Fluxos Críticos
 
-### 13.1 Fluxo: Registrar Cuidado (Online)
+### 14.1 Fluxo: Registrar Cuidado (Online)
 
 ```
 1. Usuário clica em "Registra"
-2. registrarCuidadoComOutbox() executado:
-   a. Valida dados com Zod
-   b. Salva cuidado no IndexedDB (cuidados store)
-   c. Cria evento na outbox (status: pending)
+2. handlePermitir() executado:
+   a. registrarCuidadoComOutbox():
+      - Valida dados com Zod
+      - Salva cuidado no IndexedDB (cuidados store)
+      - Cria evento na outbox (status: pending)
+   b. Solicita permissão de notificação
+   c. Se concedida: registration.pushManager.subscribe()
+   d. Envia subscription + tipo para /api/salvar-subscription
+   e. Servidor salva no Upstash Redis
 3. agendarLembrete() executado (fire-and-forget):
    a. Obtém subscription push
-   b. Calcula próxima data (hoje + 2 dias)
+   b. Calcula próxima data (hoje + intervalo)
    c. Envia para /api/salvar-subscription
    d. Servidor salva no Upstash Redis
-4. UI atualiza: countdown, último cuidado
-5. SyncContext detecta evento pendente → sync automático
+4. Toast exibe: "Registrado! Próxima rega em 2 dias"
+5. UI atualiza: countdown, último cuidado
+6. SyncContext detecta evento pendente → sync automático
 ```
 
-### 13.2 Fluxo: Registrar Cuidado (Offline)
+### 14.2 Fluxo: Registrar Cuidado (Offline)
 
 ```
 1. Usuário clica em "Registra"
@@ -792,15 +929,14 @@ npm run build    # tsc && vite build → dist/
    c. Cria evento na outbox (status: pending)
 3. agendarLembrete() falha (sem conexão) — catch silencioso
 4. UI atualiza normalmente (dados locais)
-5. SyncStatus mostra "offline"
+5. Toast exibe feedback local
 6. Quando online:
    a. SyncContext detecta conectividade
    b. triggerSync() processa outbox
    c. Eventos enviados para API
-   d. SyncStatus mostra "sincronizado"
 ```
 
-### 13.3 Fluxo: Atualização do Service Worker
+### 14.3 Fluxo: Atualização do Service Worker
 
 ```
 1. App carrega → registerSW({ immediate: true })
@@ -827,39 +963,40 @@ npm run build    # tsc && vite build → dist/
 8. App recarrega com o SW novo
 ```
 
-### 13.4 Fluxo: Push Notification
+### 14.4 Fluxo: Push Notification
 
 ```
 1. Cron (08:00 BRT) executa /api/verificar-lembretes
 2. Auth: Authorization: Bearer CRON_SECRET
-3. Servidor scanneia chaves lembrete:* no Upstash Redis
+3. Servidor scanneia chaves lembrete:* via SCAN (não KEYS)
 4. Para cada lembrete com dataDisparo <= agora:
    a. Envia push via web-push library
    b. Se "sol" (diário): reagenda para próximo dia
    c. Se "rega"/"adubo": remove chave (one-shot)
    d. Erro 404/410: remove subscription (permanente)
    e. Erro 429/5xx: mantém (retry no próximo cron)
-5. SW recebe push → exibe notificação nativa
-6. Usuário clica na notificação → app abre/foca
+5. SW recebe push → valida origin → sanitiza payload
+6. Exibe notificação nativa
+7. Usuário clica na notificação → app abre/foca
 ```
 
 ---
 
-## 14. Decisões de Design
+## 15. Decisões de Design
 
-### 14.1 Layout: Pétalas/Folhas
+### 15.1 Layout: Pétalas/Folhas
 
 **Decisão:** Interface orgânica com botões de cuidado em formato de pétalas/folhas, mantendo o layout original do protótipo `girassol.html`.
 
 **Justificativa:** Conexão visual com o tema de girassol, tornando a experiência mais envolvente.
 
-### 14.2 Navegação: Hamburger Menu
+### 15.2 Navegação: Hamburger Menu
 
 **Decisão:** Menu hamburguer lateral em vez de tabs inferiores.
 
 **Justificativa:** Economiza espaço vertical, mantendo a界面 limpa para o conteúdo principal.
 
-### 14.3 Textarea com Auto-Resize
+### 15.3 Textarea com Auto-Resize
 
 **Decisão:** Input de anotações é um textarea que cresce com o texto.
 
@@ -875,20 +1012,36 @@ const autoResize = () => {
 
 **Justificativa:** Melhor UX para anotações longas, sem ocupar espaço desnecessário quando vazio.
 
-### 14.4 Modal de Boas-Vindas
+### 15.4 Modal de Boas-Vindas
 
-**Decisão:** Modal aparece quando há tipos de cuidado sem registros.
+**Decisão:** Modal aparece apenas uma vez, controlado por `localStorage`.
 
 ```typescript
-const tiposSemRegistro = await obterTiposSemRegistro();
-if (tiposSemRegistro.length > 0) {
-  setShowModal(true);
-}
+// DiarioView.tsx
+const CHAVE_BOAS_VINDAS = 'girassol_boas_vindas_visto';
+
+useEffect(() => {
+  const jaViu = localStorage.getItem(CHAVE_BOAS_VINDAS);
+  if (!jaViu) {
+    setShowModal(true);
+  }
+}, []);
+
+const fecharModal = () => {
+  setShowModal(false);
+  localStorage.setItem(CHAVE_BOAS_VINDAS, 'true');
+};
 ```
 
-**Justificativa:** Guia novos usuários sem ser intrusivo (aparece apenas quando necessário).
+**Justificativa:** Guia novos usuários sem ser intrusivo (aparece apenas na primeira vez).
 
-### 14.5 Cores
+### 15.5 Toast Feedback
+
+**Decisão:** Toast centralizado no viewport com barra de progresso e animação slideUp.
+
+**Justificativa:** Feedback elegante e não intrusivo — não bloqueia a UI, desaparece sozinho.
+
+### 15.6 Cores
 
 | Cor | Código | Uso |
 |-----|--------|-----|
@@ -901,9 +1054,9 @@ if (tiposSemRegistro.length > 0) {
 
 ---
 
-## 15. Problemas Encontrados e Soluções
+## 16. Problemas Encontrados e Soluções
 
-### 15.1 Race Condition na Atualização do SW
+### 16.1 Race Condition na Atualização do SW
 
 **Problema:** `registration.update()` retornava antes do SW atingir estado `installed`. Verificar `registration.installing` imediatamente resultava em `null`.
 
@@ -924,13 +1077,13 @@ const checkForUpdate = useCallback(async () => {
 }, []);
 ```
 
-### 15.2 Tipo ServiceWorkerState
+### 16.2 Tipo ServiceWorkerState
 
 **Problema:** `ServiceWorkerState` TypeScript não inclui `'waiting'` como valor válido.
 
 **Solução:** Usar `'installed'` em vez de `'waiting'` para type-checking, já que `waiting` é o estado após `installed`.
 
-### 15.3 Border Brancas nos Ícones PWA
+### 16.3 Border Brancas nos Ícones PWA
 
 **Problema:** Android preenchia cantos transparentes com branco ao aplicar máscara circular.
 
@@ -939,7 +1092,7 @@ const checkForUpdate = useCallback(async () => {
 2. Preencher fundo com cor azul sólida `(55, 150, 218)`
 3. Usar `purpose: 'any'` para ícones sem máscara
 
-### 15.4 Notificação Bloqueando UI
+### 16.4 Notificação Bloqueando UI
 
 **Problema:** `agendarLembrete()` era `await` antes de atualizar UI, bloqueando o fluxo se push falhasse.
 
@@ -951,7 +1104,7 @@ carregarCountdowns();                 // Countdown atualiza
 agendarLembrete(tipo).catch(() => {}); // Notificação é silenciosa
 ```
 
-### 15.5 Datas Duplicadas no Countdown
+### 16.5 Datas Duplicadas no Countdown
 
 **Problema:** "Último Cuidado" e "Próximo Lembrete" mostravam a mesma data.
 
@@ -959,7 +1112,7 @@ agendarLembrete(tipo).catch(() => {}); // Notificação é silenciosa
 - `obterUltimoCuidado()`: Retorna "Hoje", "Ontem" ou data (DD/MM/YYYY)
 - `obterProximoLembrete()`: Retorna DD/MM/YYYY ou "Vence hoje!"
 
-### 15.6 SyncContext Travado em "Syncing"
+### 16.6 SyncContext Travado em "Syncing"
 
 **Problema:** `atualizarEstado` não chamava `triggerSync()` quando detectava eventos pendentes enquanto online.
 
@@ -972,13 +1125,65 @@ if (online && eventosPendentes > 0) {
 }
 ```
 
-### 9.6 Endpoints de teste vs produção
+### 16.7 handlePermitir Não Chamava agendarLembrete
 
-| Endpoint | Quem chama | Auth |
-|---|---|---|
-| `POST /api/salvar-subscription` | Cliente da usuária (em produção) | nenhuma (rate limit) |
-| `GET /api/verificar-lembretes` | Vercel Cron | `Authorization: Bearer CRON_SECRET` |
-| `POST /api/test-push` | `TestarPush.tsx` (admin) | `X-Test-Token: CRON_SECRET` em produção |
+**Problema:** `handlePermitir()` salvava o cuidado mas NÃO chamava `agendarLembrete()`. A subscription nunca era salva no servidor.
+
+**Solução:** Após conceder permissão, chama `agendarLembrete(tipo)`:
+
+```typescript
+const handlePermitir = async (tipo) => {
+  await registrarCuidadoComOutbox(cuidado);
+  await carregarCountdowns();
+  agendarLembrete(tipo).catch(() => {});
+};
+```
+
+### 16.8 Fuso Horário: setHours(8) vs setUTCHours(11)
+
+**Problema:** `setHours(8)` cria data no horário local, mas o Upstash REST compara com UTC. Cron roda 11:00 UTC = 08:00 BRT.
+
+**Solução:** Usar `setUTCHours(11)` para alinhar com o cron:
+
+```typescript
+const dataDisparo = new Date();
+dataDisparo.setUTCHours(11, 0, 0, 0); // 11:00 UTC = 08:00 BRT
+```
+
+### 16.9 Upstash REST: get() Retorna String
+
+**Problema:** `redis.get()` do Upstash REST retorna `string`, não objeto. `JSON.parse()` é necessário.
+
+**Solução:**
+
+```typescript
+const subscription = JSON.parse(await redisGet(`lembrete:${userId}:${tipo}`));
+```
+
+### 16.10 KEYS vs SCAN no Redis
+
+**Problema:** `KEYS` é O(n) e bloqueia o Redis. Upstash não recomenda para produção.
+
+**Solução:** Usar `SCAN` iterativo:
+
+```typescript
+let cursor = '0';
+do {
+  const res = await fetch(`${REDIS_URL}/scan/${cursor}?match=lembrete:*&count=100`);
+  const data = await res.json();
+  cursor = data.result[0];
+  // processa data.result[1]...
+} while (cursor !== '0');
+```
+
+### 16.11 .env.local No Git
+
+**Problema:** `.env.vercel-import` com chaves reais foi commitado accidentalmente.
+
+**Solução:**
+- Delete do disco imediatamente
+- `.gitignore` atualizado: `.env.*` coberto (exceto `.env.example`)
+- `CRON_SECRET` restaurado como placeholder
 
 ---
 
@@ -1009,7 +1214,6 @@ git push origin main:staging  # Deploy para staging
 - `react-dom` ^18.2.0
 - `localforage` ^1.10.0
 - `zod` ^3.22.4
-- `@upstash/redis` ^1.38.0
 - `web-push` ^3.6.7
 
 ### Desenvolvimento
@@ -1023,4 +1227,4 @@ git push origin main:staging  # Deploy para staging
 
 ---
 
-*Documento gerado em 16/06/2026 — Projeto Meu Girassol v1.0.0*
+*Documento atualizado em 17/06/2026 — Projeto Meu Girassol v1.0.0*

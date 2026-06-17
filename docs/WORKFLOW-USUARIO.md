@@ -74,7 +74,8 @@
 │  │ └─────────────────────────┘   │  │
 │  └───────────────────────────────┘  │
 │                                     │
-│  [Status: Sincronizado ✓]           │
+│  [Toast: Registrado! Próxima       │
+│   rega em 2 dias ✓]                │
 └─────────────────────────────────────┘
 ```
 
@@ -95,9 +96,14 @@
    - "Último [cuidado]" mostra a data de hoje
    - "Próximo [cuidado]" recalcula a data
 
-4. Se offline:
+4. Toast aparece (centralizado, com barra de progresso):
+   - "Registrado! Próxima rega em 2 dias"
+   - "Sol todos os dias!"
+   - "Registrado! Próximo adubo em 15 dias"
+   (desaparece automaticamente após 3.5 segundos)
+
+5. Se offline:
    - Dados ficam salvos localmente
-   - Status mostra "offline"
    - Sincroniza automaticamente quando voltar online
 ```
 
@@ -166,14 +172,18 @@
 ### 4.1 Solicitação de Permissão
 
 ```
-1. App solicita permissão para notificações
-   (via registration.pushManager.subscribe())
+1. Usuário clica em um botão de cuidado (Rega/Sol/Adubo)
 
-2. Usuário concede permissão no browser
+2. Se permissão ainda não foi concedida:
+   a. App salva o cuidado localmente primeiro
+   b. Browser exibe dialog: " Permitir notificações?"
+   c. Usuário clica "Permitir"
 
-3. Subscription é enviada para o servidor
+3. App aguarda resolução da permissão:
+   - Concedida: subscription push é criada e enviada ao servidor
+   - Negada: cuidado já foi salvo, notificação é ignorada silenciosamente
 
-4. Servidor agenda notificações baseado nos cuidados registrados
+4. Toast confirma: "Registrado! Próxima rega em 2 dias"
 ```
 
 ### 4.2 Receber Notificação
@@ -240,14 +250,14 @@
 ```
 1. Usuário abre app (pode estar offline)
 
-2. App carrega normalmente ( assets em cache pelo SW)
+2. App carrega normalmente (assets em cache pelo SW)
 
 3. Usuário pode:
    - Registrar cuidados ✓
    - Criar anotações ✓
    - Navegar nas abas ✓
 
-4. Status mostra "offline" ou ícone de sem conexão
+4. Dados são salvos localmente no IndexedDB
 ```
 
 ### 6.2 Voltando Online
@@ -261,9 +271,7 @@
    - Cuidados → /api/sync-events
    - Push subscriptions → /api/salvar-subscription
 
-4. Status mostra "sincronizado" ✓
-
-5. Dados locais → servidor (não o contrário)
+4. Dados locais → servidor (não o contrário)
 ```
 
 ---
@@ -272,7 +280,7 @@
 
 | Ação | Onde | Resultado |
 |------|------|-----------|
-| Registrar rega/sol/adubo | Calendário de Carinho | Cuidado salvo + push agendado |
+| Registrar rega/sol/adubo | Calendário de Carinho | Cuidado salvo + push agendado + toast |
 | Criar anotação | textarea + "Salvar" | Anotação salva com data |
 | Excluir anotação | Botão ✕ | Soft-delete (some da lista) |
 | Navegar entre abas | Menu hamburguer | Troca de view |
@@ -287,8 +295,21 @@
 | Evento | Ação Técnica |
 |--------|-------------|
 | Usuário clica "Registra" | `registrarCuidadoComOutbox()` → IndexedDB + outbox |
+| Toast aparece | Componente `Toast.tsx` com barra de progresso (3.5s) |
 | App fica em background | SW verifica atualização |
 | App volta ao foreground | Sync processa eventos pendentes |
 | Cron 08:00 BRT | Envia push para lembretes vencidos |
 | Usuário abre app | SW detecta nova versão se disponível |
 | Usuário muda de aba | SW ativa em background se houver update |
+
+### 8.1 Modal de Boas-Vindas
+
+O modal de boas-vindas aparece apenas uma vez, controlado por `localStorage`:
+
+```
+1. Usuário abre o app pela primeira vez
+2. App verifica: localStorage['girassol_boas_vindas_visto']
+3. Se não existe → exibe modal de boas-vindas
+4. Ao fechar → salva flag no localStorage
+5. Nas próximas aberturas → modal não aparece
+```

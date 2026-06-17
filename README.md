@@ -12,6 +12,7 @@ Cultivar girassol exige rigor em ciclos de rega, exposição solar e adubação.
 - Botões pétala para registrar rega, sol e adubo
 - Countdown visual para próxima ação
 - Persistência local via IndexedDB (localforage)
+- Toast de feedback elegante com barra de progresso
 
 ### Notificações push matutinas
 - Vercel Cron às 8h BRT envia lembretes via web-push
@@ -27,18 +28,8 @@ Cultivar girassol exige rigor em ciclos de rega, exposição solar e adubação.
 ### Offline first (arquitetura por eventos)
 - **Outbox Pattern**: toda operação é registrada localmente antes de sincronizar
 - **Sincronização automática**: processa fila ao detectar conexão
-- **Feedback visual**: banner discreto com estado da sincronização
 - **Idempotência**: eventos não são processados em duplicidade
 - **Retentativas**: falhas são reattemptadas automaticamente
-
-### Estados de sincronização
-
-| Estado | Mensagem |
-|---|---|
-| Offline | 📶 Sem internet. Continue registrando seus cuidados normalmente. |
-| Sincronizando | ⏳ Atualizando suas anotações... |
-| Sincronizado | ✅ Tudo atualizado |
-| Erro | ⚠️ Não foi possível atualizar. Tentaremos novamente. |
 
 ## 🏗️ Arquitetura
 
@@ -64,7 +55,7 @@ Cron Jobs → Push Notifications
 
 ```
 ├── api/
-│   ├── salvar-subscription.ts      # POST: salva subscription Push no KV
+│   ├── salvar-subscription.ts      # POST: salva subscription Push no Redis
 │   ├── verificar-lembretes.ts      # Cron: envia Web Push matutino
 │   └── sync-events.ts             # POST: recebe eventos da outbox
 ├── src/
@@ -88,13 +79,12 @@ Cron Jobs → Push Notifications
 │   │   │   ├── Header.tsx
 │   │   │   ├── Navigation.tsx
 │   │   │   ├── AgendaBox.tsx
-│   │   │   ├── InstallPrompt.tsx
-│   │   │   ├── SyncStatus.tsx      # Banner de estado offline/online
-│   │   │   └── TestarPush.tsx
+│   │   │   ├── Toast.tsx
+│   │   │   └── InstallPrompt.tsx
 │   │   └── views/
 │   │       ├── DiarioView.tsx
 │   │       └── CuidadosView.tsx
-│   ├── __tests__/                  # 15 suítes / 110 testes
+│   ├── __tests__/                  # 14 suítes / 101 testes
 │   ├── App.tsx
 │   └── main.tsx
 ├── public/
@@ -102,7 +92,6 @@ Cron Jobs → Push Notifications
 │   ├── icon-192.png
 │   ├── icon-512.png
 │   └── favicon.png
-├── test-push-staging.sh           # Script de teste de push
 ├── vercel.json
 ├── vite.config.ts
 └── package.json
@@ -110,7 +99,7 @@ Cron Jobs → Push Notifications
 
 ## 🧪 Testes
 
-### Cobertura (atualizado pós-Planos 01–04)
+### Cobertura
 
 | Suíte | Testes | O que valida |
 |---|---|---|
@@ -122,14 +111,13 @@ Cron Jobs → Push Notifications
 | `registrar-cuidado.spec.ts` | 4 | Schema Zod de validação |
 | `gerenciar-lembretes.spec.ts` | 4 | Schema Zod de lembretes |
 | `agendar-notificacao.spec.ts` | 3 | Google Calendar URL |
-| `build.spec.ts` | 12 | Arquivos de build existentes |
-| `sw-custom.spec.ts` | 5 | Handlers do service worker custom |
-| `useServiceWorkerUpdate.spec.ts` | 7 | Hook de update do SW |
-| `validation.spec.ts` | 14 | Schemas Zod compartilhados |
-| `rate-limit.spec.ts` | 7 | Rate limit in-memory |
+| `build.spec.ts` | 5 | Arquivos de build existentes |
+| `sw-custom.spec.ts` | 8 | Handlers do service worker custom |
+| `useServiceWorkerUpdate.spec.ts` | 11 | Hook de update do SW |
+| `validation.spec.ts` | 10 | Schemas Zod compartilhados |
 | `test-push-endpoint.spec.ts` | 4 | Endpoint /api/test-push |
 | `redis-client.spec.ts` | 6 | Factory de Redis injetável |
-| **Total** | **110** | |
+| **Total** | **101** | |
 
 ### Executar
 
@@ -144,9 +132,10 @@ npm run test:coverage # Com cobertura
 |---|---|---|
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Client | Chave pública VAPID |
 | `VAPID_PRIVATE_KEY` | Server | Chave privada VAPID |
-| `UPSTASH_REDIS_REST_URL` | Server | URL do Upstash Redis (via Marketplace) |
+| `UPSTASH_REDIS_REST_URL` | Server | URL do Upstash Redis |
 | `UPSTASH_REDIS_REST_TOKEN` | Server | Token REST do Upstash |
 | `CRON_SECRET` | Server | Secret para Vercel Cron |
+| `VITE_SYNC_API_KEY` | Client + Server | Chave de API para sync |
 
 ## 📋 Comandos
 
@@ -158,31 +147,21 @@ npm test              # Executar testes
 npm run lint          # Verificar tipos TypeScript
 ```
 
-## 🧪 Teste de push no staging
+## 🛡️ Segurança
 
-```bash
-# 1. Abra o deploy preview com ?test
-# https://girassol-xxxxx.vercel.app/?test
-
-# 2. Clique no botão 🧪 → 💧 → Cole CRON_SECRET → Disparar
-
-# 3. Notificação chega imediatamente
-```
+- **X-API-Key**: Autenticação de API via header (bloqueia bots)
+- **Timing-safe comparison**: Comparação constante-time de API keys
+- **Rate Limit**: Redis INCR + EXPIRE (10 req/min por IP)
+- **CSP header**: Content Security Policy no vercel.json
+- **Service Worker**: Validação de origin + sanitização de payload
+- **.gitignore**: `.env.*` coberto (exceto `.env.example`)
+- **TestarPush**: Dev-only (sem acesso a secrets em produção)
 
 ## 🚀 Deploy
 
 - **Produção**: branch `main` → Vercel
 - **Staging**: branch `staging` → Vercel Preview
 - **Cron**: `0 11 * * *` (8h BRT) via vercel.json
-
-## 🛡️ Planos de hardening aplicados
-
-- **Plano 01:** Service Worker com update seguro (visibilitychange + ativação em background)
-- **Plano 02:** Validação Zod em todas as API functions + rate limit
-- **Plano 03:** Endpoint `/api/test-push` autenticado server-side (CRON_SECRET sai do browser)
-- **Plano 04:** Migração de `@vercel/kv` (deprecated) para `@upstash/redis`
-
-Detalhes em `docs/plans/`.
 
 ## 📄 Licença
 
