@@ -94,7 +94,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     for (const chave of chaves) {
       const lembrete = await redis.get<LembreteKV>(chave);
-      if (!lembrete || lembrete.processado) continue;
+      if (!lembrete) continue;
 
       const dataDisparo = new Date(lembrete.dataDisparo);
       if (agora < dataDisparo) continue;
@@ -109,16 +109,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         );
         enviados++;
 
-        if (lembrete.tipo === 'sol') {
-          const amanha = new Date();
-          amanha.setDate(amanha.getDate() + 1);
-          amanha.setUTCHours(11, 0, 0, 0);
-          lembrete.dataDisparo = amanha.toISOString();
-          await redis.set(chave, lembrete);
-        } else {
-          await redis.del(chave);
-          apagados++;
-        }
+        const diasAcrescimo = lembrete.tipo === 'adubo' ? 15 : lembrete.tipo === 'rega' ? 2 : 1;
+        const proximoDisparo = new Date();
+        proximoDisparo.setDate(proximoDisparo.getDate() + diasAcrescimo);
+        proximoDisparo.setUTCHours(11, 0, 0, 0);
+        lembrete.dataDisparo = proximoDisparo.toISOString();
+        await redis.set(chave, lembrete);
       } catch (error) {
         const statusCode = (error as any)?.statusCode;
         const errMsg = (error as any)?.message || String(error);
