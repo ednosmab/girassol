@@ -330,3 +330,88 @@ export async function obterTiposSemRegistro(): Promise<('rega' | 'sol' | 'adubo'
 
   return faltantes;
 }
+
+const NotificacaoEnviadaKey = 'girassol-notificacoes-enviadas';
+
+function jaFoiNotificada(tipo: 'rega' | 'sol' | 'adubo', dataISO: string): boolean {
+  try {
+    const raw = localStorage.getItem(NotificacaoEnviadaKey);
+    if (!raw) return false;
+    const enviadas: Record<string, string> = JSON.parse(raw);
+    return enviadas[tipo] === dataISO;
+  } catch {
+    return false;
+  }
+}
+
+function marcarNotificada(tipo: 'rega' | 'sol' | 'adubo', dataISO: string): void {
+  try {
+    const raw = localStorage.getItem(NotificacaoEnviadaKey);
+    const enviadas: Record<string, string> = raw ? JSON.parse(raw) : {};
+    enviadas[tipo] = dataISO;
+    localStorage.setItem(NotificacaoEnviadaKey, JSON.stringify(enviadas));
+  } catch {}
+}
+
+export async function verificarLembretesAtrasados(): Promise<void> {
+  console.log('[NOTIF] Verificando lembretes atrasados ao abrir app...');
+
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
+    console.log('[NOTIF] Permissão não concedida, pulando verificação de lembretes atrasados');
+    return;
+  }
+
+  const tipos: ('rega' | 'sol' | 'adubo')[] = ['rega', 'sol', 'adubo'];
+  const agora = new Date();
+
+  for (const tipo of tipos) {
+    let ultimoTimestamp: string | null = null;
+
+    await db.cuidados.iterate<{ tipo: string; timestamp: string; criadoEm: number }, void>((value) => {
+      if (value.tipo === tipo && (!ultimoTimestamp || value.criadoEm > new Date(ultimoTimestamp).getTime())) {
+        ultimoTimestamp = value.timestamp;
+      }
+    });
+
+    if (!ultimoTimestamp) continue;
+
+    const dias = tipo === 'adubo' ? 15 : tipo === 'rega' ? 2 : 1;
+    const dataProxima = new Date(ultimoTimestamp);
+    dataProxima.setDate(dataProxima.getDate() + dias);
+    dataProxima.setUTCHours(11, 0, 0, 0);
+
+    if (agora >= dataProxima) {
+      const dataKey = dataProxima.toISOString();
+      if (!jaFoiNotificada(tipo, dataKey)) {
+        console.log(`[NOTIF] Lembrete atrasado detectado: ${tipo} (vencido em ${dataKey})`);
+        const titulos: Record<string, string> = {
+          rega: TitulosNotificacao.rega,
+          sol: TitulosNotificacao.sol,
+          adubo: TitulosNotificacao.adubo
+        };
+        const mensagens: Record<string, string> = {
+          rega: DescricoesNotificacao.rega,
+          sol: DescricoesNotificacao.sol,
+          adubo: DescricoesNotificacao.adubo
+        };
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          await registration.showNotification(titulos[tipo], {
+            body: mensagens[tipo],
+            icon: '/icon-192.png',
+            tag: `lembrete-atrasado-${tipo}`,
+            vibrate: [200, 100, 200]
+          } as NotificationOptions & { vibrate?: number[] });
+          marcarNotificada(tipo, dataKey);
+          console.log(`[NOTIF] Notificação local disparada para: ${tipo}`);
+        } catch (e) {
+          console.error(`[NOTIF] Falha ao disparar notificação para ${tipo}:`, (e as Error).message);
+        }
+      } else {
+        console.log(`[NOTIF] Lembrete ${tipo} já notificado para ${dataKey}, pulando`);
+      }
+    }
+  }
+
+  console.log('[NOTIF] Verificação de lembretes atrasados concluída');
+}
