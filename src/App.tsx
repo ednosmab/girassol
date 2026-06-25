@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useServiceWorkerUpdate } from './core/hooks/useServiceWorkerUpdate';
+import { atualizarSubscriptionServidor } from './core/use-cases/notificacao-nativa';
 import { Header } from './ui/components/Header';
 import { Navigation } from './ui/components/Navigation';
 import { InstallPrompt } from './ui/components/InstallPrompt';
@@ -13,6 +14,10 @@ import { SyncProvider } from './core/contexts/SyncContext';
 
 export default function App() {
   useServiceWorkerUpdate();
+
+  useEffect(() => {
+    atualizarSubscriptionServidor();
+  }, []);
 
   const [abaAtiva, setAbaAtiva] = useState('diario');
 

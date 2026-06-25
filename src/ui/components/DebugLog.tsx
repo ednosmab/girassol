@@ -154,6 +154,50 @@ async function testarPushCompleto() {
   }
 }
 
+async function verificarCron() {
+  swLog('info', 'Chamando /api/verificar-lembretes (GET)...');
+  try {
+    const res = await fetch('/api/verificar-lembretes', { method: 'GET' });
+    const data = await res.json();
+    if (res.status === 401) {
+      swLog('error', `Cron: 401 Não autorizado — CRON_SECRET não configurado ou inválido`);
+      return;
+    }
+    swLog('info', `Cron: HTTP ${res.status} — enviados=${data.enviados}, erros=${data.erros}, apagados=${data.apagados}`);
+    if (data.erros > 0) {
+      swLog('warn', `Cron: ${data.erros} erro(s) ao enviar push`);
+    }
+    if (data.enviados > 0) {
+      swLog('info', 'Cron disparou push! Verifique a tela de bloqueio.');
+    }
+  } catch (e) {
+    swLog('error', `Cron FALHOU: ${(e as Error).message}`);
+  }
+}
+
+async function atualizarSubscription() {
+  swLog('info', 'Atualizando subscription no servidor...');
+  try {
+    const sub = await navigator.serviceWorker.ready.then(r => r.pushManager.getSubscription());
+    if (!sub) {
+      swLog('error', 'Subscription não existe');
+      return;
+    }
+    const res = await fetch('/api/atualizar-subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': (import.meta as any).env?.VITE_SYNC_API_KEY ?? ''
+      },
+      body: JSON.stringify({ subscription: sub.toJSON() })
+    });
+    const data = await res.json();
+    swLog('info', `Subscription atualizada: ${data.atualizados} lembrete(s) sincronizado(s)`);
+  } catch (e) {
+    swLog('error', `Atualizar subscription FALHOU: ${(e as Error).message}`);
+  }
+}
+
 const buttonStyle = {
   padding: '6px 10px',
   borderRadius: '8px',
@@ -317,6 +361,12 @@ export function DebugLog() {
         </button>
         <button onClick={testarPushCompleto} style={{ ...buttonStyle, background: '#9B5DE5', color: 'white', fontWeight: 800 }}>
           Push Completo
+        </button>
+        <button onClick={verificarCron} style={{ ...buttonStyle, background: '#2A9D8F', color: 'white' }}>
+          Verificar Cron
+        </button>
+        <button onClick={atualizarSubscription} style={{ ...buttonStyle, background: '#E9C46A', color: '#3C2A21' }}>
+          Atualizar Sub
         </button>
       </div>
 

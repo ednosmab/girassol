@@ -133,6 +133,38 @@ export async function obterPushSubscription(): Promise<PushSubscription | null> 
   return subscription;
 }
 
+export async function atualizarSubscriptionServidor(): Promise<boolean> {
+  console.log('[NOTIF] Atualizando subscription no servidor...');
+  try {
+    const subscription = await obterPushSubscription();
+    if (!subscription) {
+      console.warn('[NOTIF] Subscription não disponível para atualizar');
+      return false;
+    }
+
+    const response = await fetch('/api/atualizar-subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': (import.meta as any).env?.VITE_SYNC_API_KEY ?? ''
+      },
+      body: JSON.stringify({ subscription: subscription.toJSON() })
+    });
+
+    if (!response.ok) {
+      console.error(`[NOTIF] Falha ao atualizar subscription: ${response.status}`);
+      return false;
+    }
+
+    const data = await response.json();
+    console.log(`[NOTIF] Subscription atualizada: ${data.atualizados} lembrete(s) atualizado(s)`);
+    return true;
+  } catch (e) {
+    console.error('[NOTIF] Erro ao atualizar subscription:', (e as Error).message);
+    return false;
+  }
+}
+
 export async function agendarLembrete(
   tipo: 'rega' | 'sol' | 'adubo'
 ): Promise<{ success: boolean; agendadoPara?: string }> {

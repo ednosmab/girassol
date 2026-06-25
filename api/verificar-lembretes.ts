@@ -99,9 +99,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const dataDisparo = new Date(lembrete.dataDisparo);
       if (agora < dataDisparo) continue;
 
+      const idUsuario = chave.split(':')[1];
+      const subAtual = await redis.get<{ endpoint: string; keys: any }>(`subscription:${idUsuario}`);
+      const subscriptionToSend = subAtual
+        ? { endpoint: subAtual.endpoint, keys: subAtual.keys }
+        : lembrete.subscription;
+
       try {
         await webpush.sendNotification(
-          lembrete.subscription,
+          subscriptionToSend,
           JSON.stringify({
             title: '🌻 Meu Girassol',
             body: mensagens[lembrete.tipo] || 'Seu girassol precisa de você!'
@@ -109,6 +115,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         );
         enviados++;
 
+        if (subAtual) {
+          lembrete.subscription = { endpoint: subAtual.endpoint, keys: subAtual.keys } as webpush.PushSubscription;
+        }
         const diasAcrescimo = lembrete.tipo === 'adubo' ? 15 : lembrete.tipo === 'rega' ? 2 : 1;
         const proximoDisparo = new Date();
         proximoDisparo.setDate(proximoDisparo.getDate() + diasAcrescimo);

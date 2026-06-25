@@ -120,6 +120,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       processado: false
     });
 
+    await redis.set(`subscription:${idUsuario}`, {
+      endpoint: subscription.endpoint,
+      keys: subscription.keys,
+      atualizadoEm: new Date().toISOString()
+    });
+
     return res.status(200).json({ success: true, agendadoPara: dataProxima });
   } catch (error) {
     console.error('salvar-subscription error:', error instanceof Error ? error.message : error);
