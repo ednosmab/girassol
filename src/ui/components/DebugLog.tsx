@@ -112,6 +112,48 @@ async function checkAPI() {
   }
 }
 
+async function testarPushCompleto() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    swLog('error', 'PushManager não suportado');
+    return;
+  }
+  try {
+    swLog('info', 'Passo 1: Obtendo SW registration...');
+    const reg = await navigator.serviceWorker.ready;
+    swLog('info', `SW active: ${!!reg.active}`);
+
+    swLog('info', 'Passo 2: Obtendo push subscription...');
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      swLog('error', 'Push subscription NÃO existe — impossível testar');
+      return;
+    }
+    const subJson = sub.toJSON();
+    swLog('info', `Subscription OK: endpoint=${sub.endpoint.substring(0, 60)}...`);
+
+    swLog('info', 'Passo 3: Enviando para /api/testar-push...');
+    const res = await fetch('/api/testar-push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': (import.meta as any).env?.VITE_SYNC_API_KEY ?? ''
+      },
+      body: JSON.stringify({ subscription: subJson, tipo: 'rega' })
+    });
+
+    const data = await res.json();
+    swLog('info', `Resposta HTTP: ${res.status}`);
+
+    if (data.enviado) {
+      swLog('info', 'Push ENVIADO com sucesso! Verifique a tela de bloqueio.');
+    } else {
+      swLog('error', `Push FALHOU: ${data.error || 'desconhecido'} (HTTP ${data.statusCode || 'N/A'})`);
+    }
+  } catch (e) {
+    swLog('error', `Teste push FALHOU: ${(e as Error).message}`);
+  }
+}
+
 const buttonStyle = {
   padding: '6px 10px',
   borderRadius: '8px',
@@ -272,6 +314,9 @@ export function DebugLog() {
         </button>
         <button onClick={checkAPI} style={{ ...buttonStyle, background: '#E76F51', color: 'white' }}>
           Teste API
+        </button>
+        <button onClick={testarPushCompleto} style={{ ...buttonStyle, background: '#9B5DE5', color: 'white', fontWeight: 800 }}>
+          Push Completo
         </button>
       </div>
 
