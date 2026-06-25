@@ -224,6 +224,10 @@ const buttonStyle = {
   whiteSpace: 'nowrap' as const
 };
 
+function isStaging(): boolean {
+  return window.location.hostname.includes('staging');
+}
+
 export function DebugLog() {
   const [logs, setLogs] = useState<DebugLogEntry[]>(getDebugHistory());
   const [isOpen, setIsOpen] = useState(false);
@@ -270,6 +274,8 @@ export function DebugLog() {
       setTimeout(() => setCopiado(false), 2000);
     }
   };
+
+  if (!isStaging()) return null;
 
   if (!isOpen) {
     return (
