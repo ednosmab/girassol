@@ -175,7 +175,7 @@ async function verificarCron() {
     const cronRes = await fetch('/api/testar-cron', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ secret: '' })
+      body: JSON.stringify({ secret: 'girassol-cron-secret-2024' })
     });
     const cronData = await cronRes.json();
     if (cronRes.status === 401) {
