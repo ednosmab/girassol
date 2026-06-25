@@ -125,6 +125,7 @@ const buttonStyle = {
 export function DebugLog() {
   const [logs, setLogs] = useState<DebugLogEntry[]>(getDebugHistory());
   const [isOpen, setIsOpen] = useState(false);
+  const [copiado, setCopiado] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -147,6 +148,24 @@ export function DebugLog() {
       case 'warn': return '#D98E04';
       case 'sw': return '#9B5DE5';
       default: return '#40513B';
+    }
+  };
+
+  const copiarLogs = async () => {
+    const text = logs.map(l => `${l.timestamp} [${l.level.toUpperCase()}] [${l.source}] ${l.message}`).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
     }
   };
 
@@ -208,6 +227,12 @@ export function DebugLog() {
           Debug ({logs.length})
         </span>
         <div style={{ display: 'flex', gap: '6px' }}>
+          <button
+            onClick={copiarLogs}
+            style={{ ...buttonStyle, background: copiado ? '#40513B' : '#3A86FF', color: 'white' }}
+          >
+            {copiado ? 'Copiado!' : 'Copiar'}
+          </button>
           <button
             onClick={() => { clearDebugHistory(); setLogs([]); }}
             style={{ ...buttonStyle, background: '#E63946', color: 'white' }}
