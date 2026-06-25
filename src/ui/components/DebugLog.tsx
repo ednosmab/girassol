@@ -155,23 +155,39 @@ async function testarPushCompleto() {
 }
 
 async function verificarCron() {
-  swLog('info', 'Chamando /api/verificar-lembretes (GET)...');
+  swLog('info', 'Verificando configuração do cron...');
   try {
-    const res = await fetch('/api/verificar-lembretes', { method: 'GET' });
-    const data = await res.json();
-    if (res.status === 401) {
-      swLog('error', `Cron: 401 Não autorizado — CRON_SECRET não configurado ou inválido`);
+    const statusRes = await fetch('/api/testar-cron', { method: 'GET' });
+    const status = await statusRes.json();
+    swLog('info', `CRON_SECRET configurado: ${status.cronSecretConfigurado}`);
+    swLog('info', `VAPID keys OK: ${status.vapidOk}`);
+    swLog('info', `Redis OK: ${status.redisOk}`);
+    swLog('info', `API Key OK: ${status.apiKeyOk}`);
+    swLog('info', `Agendamento: ${status.cronSchedule}`);
+
+    if (!status.cronSecretConfigurado) {
+      swLog('error', 'CRON_SECRET NÃO configurado na Vercel! O cron sempre retorna 401.');
+      swLog('info', 'Configure CRON_SECRET no Vercel Dashboard > Settings > Environment Variables');
       return;
     }
-    swLog('info', `Cron: HTTP ${res.status} — enviados=${data.enviados}, erros=${data.erros}, apagados=${data.apagados}`);
-    if (data.erros > 0) {
-      swLog('warn', `Cron: ${data.erros} erro(s) ao enviar push`);
+
+    swLog('info', 'Executando cron de teste...');
+    const cronRes = await fetch('/api/testar-cron', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: '' })
+    });
+    const cronData = await cronRes.json();
+    if (cronRes.status === 401) {
+      swLog('error', 'CRON_SECRET inválido ou não configurado');
+      return;
     }
-    if (data.enviados > 0) {
-      swLog('info', 'Cron disparou push! Verifique a tela de bloqueio.');
+    swLog('info', `Cron: ${cronData.totalVerificados} lembrete(s), ${cronData.enviados} enviado(s), ${cronData.erros} erro(s)`);
+    if (cronData.detalhes) {
+      cronData.detalhes.forEach((d: string) => swLog('info', d));
     }
   } catch (e) {
-    swLog('error', `Cron FALHOU: ${(e as Error).message}`);
+    swLog('error', `Verificar cron FALHOU: ${(e as Error).message}`);
   }
 }
 
