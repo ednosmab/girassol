@@ -12,6 +12,15 @@ interface ApiResponse {
   setHeader(name: string, value: string): void;
 }
 
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 function getRedis() {
   const url = (process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL) as string;
   const token = (process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN) as string;
@@ -28,12 +37,9 @@ function getRedis() {
   }
   return {
     get: <T = unknown>(key: string) => exec<string | null>('GET', key).then(v => v ? (JSON.parse(v) as T) : null),
-    set: (key: string, value: unknown, opts?: { ex?: number }) => {
-      const args: (string | number)[] = ['SET', key, typeof value === 'string' ? value : JSON.stringify(value)];
-      if (opts?.ex) args.push('EX', opts.ex);
-      return exec(...args);
-    },
+    set: (key: string, value: unknown) => exec('SET', key, typeof value === 'string' ? value : JSON.stringify(value)),
     del: (key: string) => exec('DEL', key),
+    keys: (pattern: string) => exec<string[]>('KEYS', pattern),
     scan: async (pattern: string): Promise<string[]> => {
       const allKeys: string[] = [];
       let cursor = '0';
@@ -54,11 +60,9 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails('mailto:contato@girassol.app', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 }
 
-interface LembreteKV {
-  tipo: string;
-  subscription: webpush.PushSubscription;
-  dataDisparo: string;
-  processado: boolean;
+function isPermanentError(statusCode?: number): boolean {
+  if (!statusCode) return false;
+  return statusCode === 404 || statusCode === 410;
 }
 
 function isTransientError(statusCode?: number): boolean {
@@ -66,16 +70,33 @@ function isTransientError(statusCode?: number): boolean {
   return statusCode === 408 || statusCode === 429 || (statusCode >= 500 && statusCode < 600);
 }
 
-function isPermanentError(statusCode?: number): boolean {
-  if (!statusCode) return false;
-  return statusCode === 404 || statusCode === 410;
-}
-
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
-    const authHeader = req.headers.authorization;
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return res.status(401).json({ error: 'Não autorizado' });
+    const cronSecretConfigurado = !!process.env.CRON_SECRET;
+
+    if (req.method === 'GET') {
+      const urlRedis = !!(process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL);
+      const vapidOk = !!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+      const apiKeyOk = !!process.env.VITE_SYNC_API_KEY;
+
+      return res.status(200).json({
+        cronSecretConfigurado,
+        vapidOk,
+        redisOk: urlRedis,
+        apiKeyOk,
+        cronSchedule: '0 11 * * * (11:00 UTC diário)'
+      });
+    }
+
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
+
+    const { secret } = req.body || {};
+    if (!secret || !safeCompare(String(secret), process.env.CRON_SECRET ?? '')) {
+      return res.status(401).json({ error: 'CRON_SECRET inválido', cronSecretConfigurado });
+    }
+
+    if (!VAPID_PRIVATE_KEY) {
+      return res.status(500).json({ error: 'VAPID_PRIVATE_KEY não configurada' });
     }
 
     const redis = getRedis();
@@ -91,13 +112,20 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     let enviados = 0;
     let apagados = 0;
     let erros = 0;
+    const detalhes: string[] = [];
 
     for (const chave of chaves) {
-      const lembrete = await redis.get<LembreteKV>(chave);
-      if (!lembrete) continue;
+      const lembrete = await redis.get<{ tipo: string; subscription: any; dataDisparo: string }>(chave);
+      if (!lembrete) {
+        detalhes.push(`${chave}: sem dados`);
+        continue;
+      }
 
       const dataDisparo = new Date(lembrete.dataDisparo);
-      if (agora < dataDisparo) continue;
+      if (agora < dataDisparo) {
+        detalhes.push(`${chave}: agendado para ${lembrete.dataDisparo} (ainda não chegou)`);
+        continue;
+      }
 
       const idUsuario = chave.split(':')[1];
       const subAtual = await redis.get<{ endpoint: string; keys: any }>(`subscription:${idUsuario}`);
@@ -114,28 +142,25 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           })
         );
         enviados++;
+        detalhes.push(`${chave}: ENVIADO ✅`);
 
-        if (subAtual) {
-          lembrete.subscription = { endpoint: subAtual.endpoint, keys: subAtual.keys } as webpush.PushSubscription;
-        }
         const diasAcrescimo = lembrete.tipo === 'adubo' ? 15 : lembrete.tipo === 'rega' ? 2 : 1;
         const proximoDisparo = new Date();
         proximoDisparo.setDate(proximoDisparo.getDate() + diasAcrescimo);
         proximoDisparo.setUTCHours(11, 0, 0, 0);
         lembrete.dataDisparo = proximoDisparo.toISOString();
+        if (subAtual) {
+          lembrete.subscription = { endpoint: subAtual.endpoint, keys: subAtual.keys };
+        }
         await redis.set(chave, lembrete);
-      } catch (error) {
-        const statusCode = (error as any)?.statusCode;
-        const errMsg = (error as any)?.message || String(error);
+      } catch (error: any) {
+        const statusCode = error?.statusCode;
         erros++;
-        console.error(`[verificar-lembretes] falha (${lembrete.tipo}):`, errMsg);
+        detalhes.push(`${chave}: ERRO ${statusCode || 'desconhecido'} - ${error?.message?.substring(0, 80)}`);
 
         if (isPermanentError(statusCode)) {
-          console.warn(`[verificar-lembretes] subscription morta (${statusCode}), removendo chave`);
           await redis.del(chave);
           apagados++;
-        } else if (isTransientError(statusCode)) {
-          console.warn(`[verificar-lembretes] erro transitório (${statusCode}), manter subscription`);
         }
       }
     }
@@ -144,10 +169,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       totalVerificados: chaves.length,
       enviados,
       apagados,
-      erros
+      erros,
+      detalhes
     });
   } catch (error) {
-    console.error('verificar-lembretes error:', error instanceof Error ? error.message : error);
+    console.error('testar-cron error:', error instanceof Error ? error.message : error);
     return res.status(500).json({ error: 'Erro interno no servidor.' });
   }
 }

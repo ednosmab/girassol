@@ -3,11 +3,26 @@ import { db } from '../database/localforage-db';
 export type PermissaoStatus = 'supported' | 'not-supported' | 'denied' | 'default';
 
 export function verificarSuporteNotificacoes(): PermissaoStatus {
-  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+  console.log('[NOTIF] Verificando suporte a notificações...');
+  const hasNotification = 'Notification' in window;
+  const hasSW = 'serviceWorker' in navigator;
+  console.log(`[NOTIF] 'Notification' in window: ${hasNotification}`);
+  console.log(`[NOTIF] 'serviceWorker' in navigator: ${hasSW}`);
+
+  if (!hasNotification || !hasSW) {
+    console.warn('[NOTIF] Resultado: not-supported (APIs ausentes)');
     return 'not-supported';
   }
-  if (Notification.permission === 'denied') return 'denied';
-  if (Notification.permission === 'granted') return 'supported';
+  console.log(`[NOTIF] Notification.permission = "${Notification.permission}"`);
+  if (Notification.permission === 'denied') {
+    console.warn('[NOTIF] Resultado: denied (usuário bloqueou)');
+    return 'denied';
+  }
+  if (Notification.permission === 'granted') {
+    console.log('[NOTIF] Resultado: supported (permissão já concedida)');
+    return 'supported';
+  }
+  console.log('[NOTIF] Resultado: default (permissão ainda não solicitada)');
   return 'default';
 }
 
@@ -22,21 +37,26 @@ function getVapidPublicKey(): string {
 }
 
 export async function solicitarPermissaoEAtivarNotificacoes(): Promise<boolean> {
+  console.log('[NOTIF] Solicitando permissão de notificação...');
   if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-    console.warn('Este dispositivo não suporta notificações nativas.');
+    console.warn('[NOTIF] Este dispositivo não suporta notificações nativas.');
     return false;
   }
 
+  console.log(`[NOTIF] Permissão atual antes de pedir: "${Notification.permission}"`);
+
   if (Notification.permission === 'denied') {
-    console.warn('Permissão de notificações negada pelo usuário. Reative em Configurações do navegador.');
+    console.warn('[NOTIF] Permissão negada pelo usuário. Reative em Configurações do navegador.');
     return false;
   }
 
   const permissao = await Notification.requestPermission();
+  console.log(`[NOTIF] Resultado de requestPermission: "${permissao}"`);
   if (permissao === 'granted') {
-    console.log('Permissão para notificações concedida!');
+    console.log('[NOTIF] Permissão concedida com sucesso!');
     return true;
   }
+  console.warn(`[NOTIF] Permissão não concedida: "${permissao}"`);
   return false;
 }
 
@@ -52,52 +72,114 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 export async function obterPushSubscription(): Promise<PushSubscription | null> {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.warn('Push: Service Worker ou PushManager não suportado neste navegador.');
+  console.log('[NOTIF] === Obtendo Push Subscription ===');
+
+  const hasSW = 'serviceWorker' in navigator;
+  const hasPush = 'PushManager' in window;
+  console.log(`[NOTIF] serviceWorker em navigator: ${hasSW}`);
+  console.log(`[NOTIF] PushManager em window: ${hasPush}`);
+
+  if (!hasSW || !hasPush) {
+    console.warn('[NOTIF] Service Worker ou PushManager não suportado.');
     return null;
   }
 
+  console.log(`[NOTIF] Permissão atual: "${Notification.permission}"`);
   if (Notification.permission === 'denied') {
-    console.warn('Push: Permissão de notificação negada. Reative em Configurações do navegador > Notificações.');
+    console.warn('[NOTIF] Permissão negada. Reative em Configurações > Notificações.');
     return null;
   }
 
   const permission = await Notification.requestPermission();
+  console.log(`[NOTIF] requestPermission resultado: "${permission}"`);
   if (permission !== 'granted') {
-    console.warn('Push: Permissão de notificação não concedida (status:', permission, ')');
+    console.warn(`[NOTIF] Permissão não concedida (${permission})`);
     return null;
   }
 
+  console.log('[NOTIF] Aguardando navigator.serviceWorker.ready...');
   const registration = await navigator.serviceWorker.ready;
+  console.log(`[NOTIF] SW Registration pronta: active=${!!registration.active}, scope=${registration.scope}`);
+
   let subscription = await registration.pushManager.getSubscription();
+  console.log(`[NOTIF] Subscription existente: ${subscription ? 'SIM' : 'NÃO'}`);
 
   if (!subscription) {
+    console.log('[NOTIF] Criando nova subscription...');
     let vapidKey: string;
     try {
       vapidKey = getVapidPublicKey();
+      console.log(`[NOTIF] VAPID key length: ${vapidKey.length}`);
     } catch (e) {
-      console.warn('Push:', (e as Error).message);
+      console.error('[NOTIF]', (e as Error).message);
       return null;
     }
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource
-    });
+    try {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource
+      });
+      const endpoint = subscription.endpoint;
+      console.log(`[NOTIF] Nova subscription criada: endpoint=${endpoint.substring(0, 80)}...`);
+    } catch (e) {
+      console.error('[NOTIF] Falha ao criar subscription:', (e as Error).message);
+      return null;
+    }
+  } else {
+    console.log(`[NOTIF] Usando subscription existente: ${subscription.endpoint.substring(0, 80)}...`);
   }
 
+  console.log('[NOTIF] === Push Subscription obtida com sucesso ===');
   return subscription;
+}
+
+export async function atualizarSubscriptionServidor(): Promise<boolean> {
+  console.log('[NOTIF] Atualizando subscription no servidor...');
+  try {
+    const subscription = await obterPushSubscription();
+    if (!subscription) {
+      console.warn('[NOTIF] Subscription não disponível para atualizar');
+      return false;
+    }
+
+    const response = await fetch('/api/atualizar-subscription', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': (import.meta as any).env?.VITE_SYNC_API_KEY ?? ''
+      },
+      body: JSON.stringify({ subscription: subscription.toJSON() })
+    });
+
+    if (!response.ok) {
+      console.error(`[NOTIF] Falha ao atualizar subscription: ${response.status}`);
+      return false;
+    }
+
+    const data = await response.json();
+    console.log(`[NOTIF] Subscription atualizada: ${data.atualizados} lembrete(s) atualizado(s)`);
+    return true;
+  } catch (e) {
+    console.error('[NOTIF] Erro ao atualizar subscription:', (e as Error).message);
+    return false;
+  }
 }
 
 export async function agendarLembrete(
   tipo: 'rega' | 'sol' | 'adubo'
 ): Promise<{ success: boolean; agendadoPara?: string }> {
+  console.log(`[NOTIF] === Iniciando agendamento para: ${tipo} ===`);
+
+  console.log('[NOTIF] Passo 1: Obtendo push subscription...');
   const subscription = await obterPushSubscription();
   if (!subscription) {
-    console.warn('Push subscription não disponível');
+    console.error('[NOTIF] Push subscription não disponível — abortando agendamento');
     return { success: false };
   }
 
   const timestamp = new Date().toISOString();
+  const body = JSON.stringify({ tipo, subscription: subscription.toJSON(), timestamp });
+  console.log(`[NOTIF] Passo 2: Enviando para /api/salvar-subscription (${body.length} bytes)...`);
 
   try {
     const response = await fetch('/api/salvar-subscription', {
@@ -106,15 +188,23 @@ export async function agendarLembrete(
         'Content-Type': 'application/json',
         'X-API-Key': (import.meta as any).env?.VITE_SYNC_API_KEY ?? ''
       },
-      body: JSON.stringify({ tipo, subscription: subscription.toJSON(), timestamp })
+      body
     });
 
-    if (!response.ok) throw new Error('Falha ao salvar no servidor');
+    console.log(`[NOTIF] Passo 3: Resposta HTTP ${response.status} ${response.statusText}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[NOTIF] Servidor retornou erro: ${response.status} — ${errorText}`);
+      throw new Error(`Falha ao salvar no servidor: ${response.status}`);
+    }
 
     const data = await response.json();
+    console.log(`[NOTIF] Resposta body: ${JSON.stringify(data)}`);
+    console.log(`[NOTIF] === Agendamento CONCLUÍDO: SUCESSO (próximo em ${data.agendadoPara}) ===`);
     return { success: true, agendadoPara: data.agendadoPara };
   } catch (error) {
-    console.error('Erro ao agendar lembrete:', error);
+    console.error('[NOTIF] === Agendamento FALHOU:', (error as Error).message, '===');
     return { success: false };
   }
 }
@@ -123,16 +213,26 @@ export async function dispararNotificacaoNativa(
   titulo: string,
   mensagem: string
 ): Promise<void> {
+  console.log('[NOTIF] Disparando notificação nativa local...');
+  console.log(`[NOTIF] Permissão: "${Notification.permission}"`);
+
   if (Notification.permission === 'granted') {
     const registration = await navigator.serviceWorker.ready;
+    console.log(`[NOTIF] SW ativa: ${!!registration.active}`);
 
-    registration.showNotification(titulo, {
-      body: mensagem,
-      icon: '/icon-192.png',
-      tag: 'cuidado-girassol',
-      vibrate: [200, 100, 200]
-    } as NotificationOptions & { vibrate?: number[] });
+    try {
+      await registration.showNotification(titulo, {
+        body: mensagem,
+        icon: '/icon-192.png',
+        tag: 'cuidado-girassol',
+        vibrate: [200, 100, 200]
+      } as NotificationOptions & { vibrate?: number[] });
+      console.log('[NOTIF] showNotification chamada com sucesso');
+    } catch (e) {
+      console.error('[NOTIF] showNotification FALHOU:', (e as Error).message);
+    }
   } else {
+    console.warn('[NOTIF] Permissão não é granted, solicitando...');
     await solicitarPermissaoEAtivarNotificacoes();
   }
 }
@@ -229,4 +329,89 @@ export async function obterTiposSemRegistro(): Promise<('rega' | 'sol' | 'adubo'
   }
 
   return faltantes;
+}
+
+const NotificacaoEnviadaKey = 'girassol-notificacoes-enviadas';
+
+function jaFoiNotificada(tipo: 'rega' | 'sol' | 'adubo', dataISO: string): boolean {
+  try {
+    const raw = localStorage.getItem(NotificacaoEnviadaKey);
+    if (!raw) return false;
+    const enviadas: Record<string, string> = JSON.parse(raw);
+    return enviadas[tipo] === dataISO;
+  } catch {
+    return false;
+  }
+}
+
+function marcarNotificada(tipo: 'rega' | 'sol' | 'adubo', dataISO: string): void {
+  try {
+    const raw = localStorage.getItem(NotificacaoEnviadaKey);
+    const enviadas: Record<string, string> = raw ? JSON.parse(raw) : {};
+    enviadas[tipo] = dataISO;
+    localStorage.setItem(NotificacaoEnviadaKey, JSON.stringify(enviadas));
+  } catch {}
+}
+
+export async function verificarLembretesAtrasados(): Promise<void> {
+  console.log('[NOTIF] Verificando lembretes atrasados ao abrir app...');
+
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
+    console.log('[NOTIF] Permissão não concedida, pulando verificação de lembretes atrasados');
+    return;
+  }
+
+  const tipos: ('rega' | 'sol' | 'adubo')[] = ['rega', 'sol', 'adubo'];
+  const agora = new Date();
+
+  for (const tipo of tipos) {
+    let ultimoTimestamp: string | null = null;
+
+    await db.cuidados.iterate<{ tipo: string; timestamp: string; criadoEm: number }, void>((value) => {
+      if (value.tipo === tipo && (!ultimoTimestamp || value.criadoEm > new Date(ultimoTimestamp).getTime())) {
+        ultimoTimestamp = value.timestamp;
+      }
+    });
+
+    if (!ultimoTimestamp) continue;
+
+    const dias = tipo === 'adubo' ? 15 : tipo === 'rega' ? 2 : 1;
+    const dataProxima = new Date(ultimoTimestamp);
+    dataProxima.setDate(dataProxima.getDate() + dias);
+    dataProxima.setUTCHours(11, 0, 0, 0);
+
+    if (agora >= dataProxima) {
+      const dataKey = dataProxima.toISOString();
+      if (!jaFoiNotificada(tipo, dataKey)) {
+        console.log(`[NOTIF] Lembrete atrasado detectado: ${tipo} (vencido em ${dataKey})`);
+        const titulos: Record<string, string> = {
+          rega: TitulosNotificacao.rega,
+          sol: TitulosNotificacao.sol,
+          adubo: TitulosNotificacao.adubo
+        };
+        const mensagens: Record<string, string> = {
+          rega: DescricoesNotificacao.rega,
+          sol: DescricoesNotificacao.sol,
+          adubo: DescricoesNotificacao.adubo
+        };
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          await registration.showNotification(titulos[tipo], {
+            body: mensagens[tipo],
+            icon: '/icon-192.png',
+            tag: `lembrete-atrasado-${tipo}`,
+            vibrate: [200, 100, 200]
+          } as NotificationOptions & { vibrate?: number[] });
+          marcarNotificada(tipo, dataKey);
+          console.log(`[NOTIF] Notificação local disparada para: ${tipo}`);
+        } catch (e) {
+          console.error(`[NOTIF] Falha ao disparar notificação para ${tipo}:`, (e as Error).message);
+        }
+      } else {
+        console.log(`[NOTIF] Lembrete ${tipo} já notificado para ${dataKey}, pulando`);
+      }
+    }
+  }
+
+  console.log('[NOTIF] Verificação de lembretes atrasados concluída');
 }

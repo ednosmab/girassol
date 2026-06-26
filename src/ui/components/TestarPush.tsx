@@ -1,19 +1,21 @@
 import { useState } from 'react';
 import { obterPushSubscription } from '../../core/use-cases/notificacao-nativa';
 
+function isStaging(): boolean {
+  return window.location.hostname.includes('staging');
+}
+
 export function TestarPush() {
   const [status, setStatus] = useState('');
   const [testToken, setTestToken] = useState('');
   const [mostrarPainel, setMostrarPainel] = useState(false);
 
-  const isDev = import.meta.env.DEV;
-
-  if (!isDev) return null;
+  if (!isStaging()) return null;
 
   const callTestPush = async (body: Record<string, unknown>) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     // Em produção, envia o token de teste. Em dev, não precisa.
-    if (!isDev && testToken) {
+    if (!isStaging() && testToken) {
       headers['X-Test-Token'] = testToken;
     }
     const response = await fetch('/api/test-push', {
@@ -54,7 +56,7 @@ export function TestarPush() {
   };
 
   const handleDispararCron = async () => {
-    if (!isDev && !testToken) {
+    if (!isStaging() && !testToken) {
       setStatus('Em produção, cole o X-Test-Token primeiro.');
       return;
     }
@@ -162,7 +164,7 @@ export function TestarPush() {
             </button>
           </div>
 
-          {!isDev && (
+          {!isStaging() && (
             <input
               type="password"
               placeholder="X-Test-Token"
