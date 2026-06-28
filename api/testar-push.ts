@@ -203,6 +203,29 @@ async function handleListar(res: ApiResponse) {
   return res.status(200).json({ total: itens.length, itens });
 }
 
+async function handlePushImmediate(subscription: any, tipo: string, res: ApiResponse) {
+  const mensagens: Record<string, string> = {
+    rega: 'Teste Rega: Hora de regar o seu Girassol!',
+    sol: 'Teste Sol: Que tal colocar o Girassol para tomar sol?',
+    adubo: 'Teste Adubo: Dia de fertilizar o seu Girassol!'
+  };
+
+  const titulo = 'Teste Girassol';
+  const body = mensagens[tipo] || 'Push de teste do Girassol!';
+
+  try {
+    await webpush.sendNotification(
+      subscription,
+      JSON.stringify({ title: titulo, body })
+    );
+    return res.status(200).json({ success: true, enviado: true });
+  } catch (error: any) {
+    const statusCode = error?.statusCode;
+    const errMsg = error?.message || String(error);
+    return res.status(200).json({ success: false, enviado: false, statusCode, error: errMsg });
+  }
+}
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método não permitido' });
 
@@ -222,7 +245,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       case 'listar':
         return await handleListar(res);
       default:
-        return res.status(400).json({ error: 'Action inválida. Use: agendar, disparar, listar' });
+        if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+          return res.status(400).json({ error: 'Subscription inválida' });
+        }
+        return await handlePushImmediate(subscription, tipo, res);
     }
   } catch (error) {
     console.error('testar-push error:', error instanceof Error ? error.message : error);
