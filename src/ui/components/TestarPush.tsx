@@ -7,18 +7,17 @@ function isStaging(): boolean {
 
 export function TestarPush() {
   const [status, setStatus] = useState('');
-  const [testToken, setTestToken] = useState('');
   const [mostrarPainel, setMostrarPainel] = useState(false);
 
   if (!isStaging()) return null;
 
   const callTestPush = async (body: Record<string, unknown>) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    // Em produção, envia o token de teste. Em dev, não precisa.
-    if (!isStaging() && testToken) {
-      headers['X-Test-Token'] = testToken;
+    const apiKey = (import.meta as any).env?.VITE_SYNC_API_KEY ?? '';
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey;
     }
-    const response = await fetch('/api/test-push', {
+    const response = await fetch('/api/testar-push', {
       method: 'POST',
       headers,
       body: JSON.stringify(body)
@@ -56,11 +55,6 @@ export function TestarPush() {
   };
 
   const handleDispararCron = async () => {
-    if (!isStaging() && !testToken) {
-      setStatus('Em produção, cole o X-Test-Token primeiro.');
-      return;
-    }
-
     setStatus('Disparando...');
     const response = await callTestPush({ action: 'disparar' });
     const data = await response.json();
@@ -163,20 +157,6 @@ export function TestarPush() {
               Listar
             </button>
           </div>
-
-          {!isStaging() && (
-            <input
-              type="password"
-              placeholder="X-Test-Token"
-              value={testToken}
-              onChange={(e) => setTestToken(e.target.value)}
-              style={{
-                width: '100%', padding: '8px', borderRadius: '8px',
-                border: '1px solid #333', background: '#0f0f23', color: '#eee',
-                fontSize: '0.8rem', marginBottom: '8px', boxSizing: 'border-box'
-              }}
-            />
-          )}
 
           {status && (
             <pre style={{
